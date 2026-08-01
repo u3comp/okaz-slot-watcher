@@ -8,7 +8,6 @@ from pathlib import Path
 
 from .discord import DiscordError, send_discord
 from .github_state import GitHubIssueStore, GitHubStateError
-from .live import observe_live_page
 from .model import CUTOFF_JST, PRODUCT_URL, SLOTS, is_after_cutoff, now_jst
 from .state import transition
 
@@ -32,6 +31,8 @@ def _format_notification(change) -> str:
 
 
 def run_diagnostic() -> int:
+    from .live import observe_live_page
+
     observation = observe_live_page()
     report = {
         "checked_at_jst": _timestamp(),
@@ -55,6 +56,8 @@ def run_discord_test() -> int:
 
 
 def run_normal() -> int:
+    from .live import observe_live_page
+
     webhook = os.environ.get("DISCORD_WEBHOOK_URL", "")
     token = os.environ.get("GITHUB_TOKEN", "")
     repository = os.environ.get("GITHUB_REPOSITORY", "")

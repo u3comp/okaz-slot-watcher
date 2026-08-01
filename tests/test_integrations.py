@@ -109,7 +109,7 @@ def test_failed_discord_notification_prevents_state_save(monkeypatch) -> None:
     monkeypatch.setenv("DISCORD_WEBHOOK_URL", "secret")
     monkeypatch.setenv("GITHUB_TOKEN", "token")
     monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
-    monkeypatch.setattr(cli, "observe_live_page", lambda: {"statuses": observed})
+    monkeypatch.setattr("watcher.live.observe_live_page", lambda: {"statuses": observed})
     monkeypatch.setattr(cli, "GitHubIssueStore", lambda **_kwargs: fake_store)
     monkeypatch.setattr(
         cli, "send_discord", lambda *_args: (_ for _ in ()).throw(DiscordError("failed"))
