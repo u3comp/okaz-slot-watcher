@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   gate:
-    if: ${{ github.event_name == 'workflow_dispatch' || vars.WATCHER_ENABLED == 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.WATCHER_ENABLED == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     permissions:
@@ -44,18 +44,14 @@ jobs:
         shell: bash
         run: python -m watcher.cli cutoff --github-output "$GITHUB_OUTPUT"
 
-  watch:
+  diagnostic:
     needs: gate
-    if: ${{ needs.gate.outputs.ended != 'true' }}
+    if: ${{ needs.gate.outputs.ended != 'true' && github.event_name == 'workflow_dispatch' && inputs.mode == 'diagnostic' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 4
     permissions:
       contents: read
-      issues: write
     env:
-      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      WATCH_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'normal' }}
       TZ: Asia/Tokyo
     steps:
       - name: Checkout
@@ -70,12 +66,72 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --disable-pip-version-check -r requirements.txt
 
-      - name: Run watcher
-        run: python -m watcher.cli "$WATCH_MODE"
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run diagnostic
+        run: python -m watcher.cli diagnostic
+
+  discord-test:
+    needs: gate
+    if: ${{ needs.gate.outputs.ended != 'true' && github.event_name == 'workflow_dispatch' && inputs.mode == 'discord_test' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    env:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      TZ: Asia/Tokyo
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Send one Discord test notification
+        run: python -m watcher.cli discord_test
+
+  normal:
+    needs: gate
+    if: ${{ needs.gate.outputs.ended != 'true' && ((github.event_name == 'schedule' && vars.WATCHER_ENABLED == 'true') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'normal')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    permissions:
+      contents: read
+      issues: write
+    env:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TZ: Asia/Tokyo
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run normal watcher
+        run: python -m watcher.cli normal
 
   disable-after-cutoff:
     needs: gate
-    if: ${{ always() && needs.gate.result == 'success' && needs.gate.outputs.ended == 'true' }}
+    if: ${{ always() && github.event_name == 'schedule' && vars.WATCHER_ENABLED == 'true' && needs.gate.result == 'success' && needs.gate.outputs.ended == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     permissions:

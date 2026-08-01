@@ -89,6 +89,14 @@ def test_discord_failure_does_not_expose_webhook(monkeypatch) -> None:
     assert "HTTP 500" in str(error.value)
 
 
+def test_discord_test_sends_exactly_one_message(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "secret")
+    monkeypatch.setattr(cli, "send_discord", lambda *args: calls.append(args))
+    assert cli.run_discord_test() == 0
+    assert len(calls) == 1
+
+
 def test_failed_discord_notification_prevents_state_save(monkeypatch) -> None:
     observed = {slot.key: SlotStatus.AVAILABLE.value for slot in SLOTS}
 
@@ -119,6 +127,30 @@ def test_failed_discord_notification_prevents_state_save(monkeypatch) -> None:
     assert not fake_store.saved
 
 
+def test_page_failure_is_persisted_by_normal_mode(monkeypatch) -> None:
+    observed = {slot.key: SlotStatus.UNKNOWN.value for slot in SLOTS}
+
+    class FakeStore:
+        saved_state = None
+
+        def load(self):
+            return LoadedState(default_state(), 1)
+
+        def save(self, state, issue_number):
+            self.saved_state = state
+            return issue_number
+
+    fake_store = FakeStore()
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "secret")
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    monkeypatch.setattr("watcher.live.observe_live_page", lambda: {"statuses": observed})
+    monkeypatch.setattr(cli, "GitHubIssueStore", lambda **_kwargs: fake_store)
+
+    assert cli.run_normal() == 0
+    assert fake_store.saved_state["consecutive_total_failures"] == 1
+
+
 def test_workflow_has_concurrency_timeout_and_minimal_permissions() -> None:
     workflow = (
         Path(__file__).parents[1] / ".github" / "workflows" / "availability-watcher.yml"
@@ -126,5 +158,46 @@ def test_workflow_has_concurrency_timeout_and_minimal_permissions() -> None:
     assert "group: okaz-slot-watcher" in workflow
     assert "cancel-in-progress: false" in workflow
     assert "timeout-minutes: 4" in workflow
-    assert "contents: read\n      issues: write" in workflow
-    assert "actions: write" in workflow
+    assert "permissions: {}" in workflow
+    assert "python -m playwright install --with-deps chromium" in workflow
+
+    diagnostic = workflow.split("\n  diagnostic:", 1)[1].split("\n  discord-test:", 1)[0]
+    discord_test = workflow.split("\n  discord-test:", 1)[1].split("\n  normal:", 1)[0]
+    normal = workflow.split("\n  normal:", 1)[1].split("\n  disable-after-cutoff:", 1)[0]
+    disable = workflow.split("\n  disable-after-cutoff:", 1)[1]
+
+    assert "contents: read" in diagnostic
+    assert "issues: write" not in diagnostic
+    assert "DISCORD_WEBHOOK_URL" not in diagnostic
+    assert "GITHUB_TOKEN" not in diagnostic
+
+    assert "contents: read" in discord_test
+    assert "issues: write" not in discord_test
+    assert "DISCORD_WEBHOOK_URL" in discord_test
+    assert "GITHUB_TOKEN" not in discord_test
+
+    assert "contents: read" in normal
+    assert "issues: write" in normal
+    assert "DISCORD_WEBHOOK_URL" in normal
+    assert "GITHUB_TOKEN" in normal
+
+    assert "actions: write" in disable
+    assert "github.event_name == 'schedule'" in disable
+    assert "vars.WATCHER_ENABLED == 'true'" in disable
+    assert "actions: write" not in workflow.split("\n  disable-after-cutoff:", 1)[0]
+
+
+def test_workflow_exposes_only_safe_triggers() -> None:
+    workflow = (
+        Path(__file__).parents[1] / ".github" / "workflows" / "availability-watcher.yml"
+    ).read_text(encoding="utf-8")
+    assert "  schedule:" in workflow
+    assert "  workflow_dispatch:" in workflow
+    for forbidden in (
+        "pull_request_target",
+        "pull_request:",
+        "issue_comment",
+        "workflow_run",
+        "repository_dispatch",
+    ):
+        assert forbidden not in workflow

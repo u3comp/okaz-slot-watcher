@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
 
-from .model import PRODUCT_ID, PRODUCT_TITLE, SLOTS, SlotStatus
+from .model import PRODUCT_TITLE, SLOTS, SlotStatus
 
 
 _SPACE_RE = re.compile(r"\s+")
@@ -94,6 +94,7 @@ def unknown_observation(reason: str) -> dict:
         "statuses": {slot.key: SlotStatus.UNKNOWN.value for slot in SLOTS},
         "evidence": {slot.key: reason for slot in SLOTS},
         "parser_ok": False,
+        "error_class": reason,
     }
 
 
@@ -102,14 +103,12 @@ def parse_rendered_html(source: str) -> dict:
     try:
         parser.feed(source)
         parser.close()
-    except Exception:
-        return unknown_observation("HTML parser failed")
+    except (TypeError, ValueError):
+        return unknown_observation("html_parser_error")
 
     product_roots = [root for root in parser.roots if root.title == PRODUCT_TITLE]
     if len(product_roots) != 1:
-        return unknown_observation(
-            f"expected one hydrated product root for {PRODUCT_ID}; found {len(product_roots)}"
-        )
+        return unknown_observation("hydrated_product_root_mismatch")
 
     root = product_roots[0]
     by_value: dict[str, list[tuple[str | None, str | None]]] = {}
@@ -123,18 +122,18 @@ def parse_rendered_html(source: str) -> dict:
         matches = by_value.get(slot.label, [])
         if not matches:
             statuses[slot.key] = SlotStatus.MISSING.value
-            evidence[slot.key] = "expected option is absent from hydrated product DOM"
+            evidence[slot.key] = "slot_missing"
             continue
         if len(matches) != 1:
             statuses[slot.key] = SlotStatus.UNKNOWN.value
-            evidence[slot.key] = f"expected one option; found {len(matches)}"
+            evidence[slot.key] = "slot_duplicate"
             continue
 
         input_id = matches[0][0]
         label_text = root.labels.get(input_id or "")
         if not label_text:
             statuses[slot.key] = SlotStatus.UNKNOWN.value
-            evidence[slot.key] = "option label is missing"
+            evidence[slot.key] = "slot_label_missing"
         elif _SOLD_OUT_RE.search(label_text):
             statuses[slot.key] = SlotStatus.SOLD_OUT.value
             evidence[slot.key] = label_text
@@ -143,6 +142,6 @@ def parse_rendered_html(source: str) -> dict:
             evidence[slot.key] = label_text
         else:
             statuses[slot.key] = SlotStatus.UNKNOWN.value
-            evidence[slot.key] = f"unrecognized label: {label_text}"
+            evidence[slot.key] = "slot_label_unrecognized"
 
     return {"statuses": statuses, "evidence": evidence, "parser_ok": True}

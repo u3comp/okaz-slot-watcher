@@ -38,6 +38,7 @@ def run_diagnostic() -> int:
         "checked_at_jst": _timestamp(),
         "product_url": PRODUCT_URL,
         "parser_ok": observation["parser_ok"],
+        "error_class": observation.get("error_class"),
         "statuses": observation["statuses"],
         "evidence": observation["evidence"],
     }
