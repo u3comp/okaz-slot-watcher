@@ -1,0 +1,1 @@
+"""Okaz Design availability watcher."""
