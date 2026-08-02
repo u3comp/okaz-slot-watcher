@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 from watcher.model import CUTOFF_JST, JST, SLOTS, SlotStatus, is_after_cutoff
-from watcher.state import default_state, transition
+from watcher.state import decode_issue_body, default_state, encode_issue_body, transition
 
 
 def statuses(value: SlotStatus) -> dict[str, str]:
@@ -41,3 +41,14 @@ def test_cutoff_boundary() -> None:
     assert not is_after_cutoff(CUTOFF_JST - timedelta(seconds=1))
     assert is_after_cutoff(CUTOFF_JST)
     assert is_after_cutoff(datetime(2026, 8, 23, 16, 31, tzinfo=JST))
+
+
+def test_schema_v1_migrates_without_queuing_notifications() -> None:
+    legacy = default_state()
+    legacy["schema_version"] = 1
+    legacy.pop("pending_notifications")
+    legacy["slots"][SLOTS[0].key]["status"] = SlotStatus.SOLD_OUT.value
+    migrated = decode_issue_body(encode_issue_body(legacy))
+    assert migrated["schema_version"] == 2
+    assert migrated["pending_notifications"] == []
+    assert migrated["slots"][SLOTS[0].key]["status"] == SlotStatus.SOLD_OUT.value

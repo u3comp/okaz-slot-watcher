@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 from dataclasses import dataclass
+from uuid import UUID, uuid4
 
 from .model import SLOTS, STATE_MARKER, SlotStatus, now_jst
 
@@ -12,13 +13,14 @@ FAILURE_STATUSES = {SlotStatus.MISSING.value, SlotStatus.UNKNOWN.value}
 
 def default_state() -> dict:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "slots": {
             slot.key: {"label": slot.label, "status": SlotStatus.UNKNOWN.value}
             for slot in SLOTS
         },
         "consecutive_total_failures": 0,
         "outage_notified": False,
+        "pending_notifications": [],
         "updated_at_jst": None,
     }
 
@@ -40,9 +42,68 @@ def decode_issue_body(body: str | None) -> dict:
     if start < 0 or end < 0:
         raise ValueError("state JSON fence is missing")
     data = json.loads(body[start + len("```json") : end].strip())
-    if data.get("schema_version") != 1 or not isinstance(data.get("slots"), dict):
+    if data.get("schema_version") not in (1, 2) or not isinstance(
+        data.get("slots"), dict
+    ):
         raise ValueError("unsupported state schema")
-    return data
+    return migrate_state(data)
+
+
+def migrate_state(state: dict) -> dict:
+    migrated = copy.deepcopy(state)
+    version = migrated.get("schema_version")
+    if version not in (1, 2):
+        raise ValueError("unsupported state schema")
+    pending = migrated.get("pending_notifications", [])
+    if not isinstance(pending, list):
+        raise ValueError("pending notifications must be a list")
+    for item in pending:
+        if not isinstance(item, dict):
+            raise ValueError("pending notification must be an object")
+        if not isinstance(item.get("id"), str) or not isinstance(
+            item.get("message"), str
+        ):
+            raise ValueError("pending notification fields are invalid")
+        try:
+            UUID(item["id"])
+        except (ValueError, AttributeError):
+            raise ValueError("pending notification id is invalid") from None
+        channels = item.get("channels")
+        if (
+            not isinstance(channels, dict)
+            or "discord" not in channels
+            or any(channel not in {"discord", "line"} for channel in channels)
+            or any(not isinstance(delivered, bool) for delivered in channels.values())
+        ):
+            raise ValueError("pending notification channels are invalid")
+    migrated["schema_version"] = 2
+    migrated["pending_notifications"] = pending
+    return migrated
+
+
+def enqueue_notification(
+    state: dict,
+    message: str,
+    *,
+    include_line: bool,
+    notification_id: str | None = None,
+) -> str:
+    event_id = notification_id or str(uuid4())
+    channels = {"discord": False}
+    if include_line:
+        channels["line"] = False
+    state.setdefault("pending_notifications", []).append(
+        {"id": event_id, "message": message, "channels": channels}
+    )
+    return event_id
+
+
+def remove_delivered_notifications(state: dict) -> None:
+    state["pending_notifications"] = [
+        item
+        for item in state.get("pending_notifications", [])
+        if not all(item.get("channels", {}).values())
+    ]
 
 
 @dataclass(frozen=True)
@@ -58,7 +119,7 @@ class Transition:
 
 
 def transition(previous: dict, observed_statuses: dict[str, str]) -> Transition:
-    next_state = copy.deepcopy(previous)
+    next_state = migrate_state(previous)
     next_state.setdefault("slots", {})
     available: list[str] = []
 
