@@ -56,5 +56,6 @@ docs/status/2026-08-05_line-group-destination-validation.md
 docs/delivery/2026-08-05-line-destination-gate-manifest.txt
 docs/delivery/2026-08-05-line-destination-gate-verification.md
 docs/delivery/2026-08-05-line-destination-gate-checksums.sha256
+docs/delivery/2026-08-05-line-destination-gate-scan.md
 
 Excluded: secrets, IDs, tokens, Webhook URLs, .git, environments, node_modules, .wrangler, caches, bytecode, ignored production wrangler.toml, prior unrelated reports, pnpm artifacts.
