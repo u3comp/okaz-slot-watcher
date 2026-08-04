@@ -1,0 +1,20 @@
+name = "okaz-slot-watcher-cf"
+main = "src/index.ts"
+compatibility_date = "2026-08-02"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "okaz-slot-watcher"
+database_id = "REPLACE_AFTER_D1_CREATE"
+
+[vars]
+# Keep this true until Cloudflare-side dry-run verification is complete.
+DRY_RUN = "true"
+
+# Store these with `wrangler secret put`; never commit values.
+# DISCORD_WEBHOOK_URL
+# LINE_CHANNEL_ACCESS_TOKEN
+# LINE_USER_ID

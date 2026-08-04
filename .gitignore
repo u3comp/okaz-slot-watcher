@@ -2,3 +2,12 @@ __pycache__/
 .pytest_cache/
 *.py[cod]
 .venv/
+**/node_modules/
+**/.wrangler/
+.wrangler/
+*.log
+.dev.vars
+.env
+.env.*
+*.tmp
+*.trace

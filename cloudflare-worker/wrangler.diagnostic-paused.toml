@@ -1,0 +1,8 @@
+# Temporary trigger-only configuration for the diagnostic gate.
+# Never use this file as the production configuration.
+name = "okaz-slot-watcher-cf"
+main = "src/index.ts"
+compatibility_date = "2026-08-02"
+
+[triggers]
+crons = []
