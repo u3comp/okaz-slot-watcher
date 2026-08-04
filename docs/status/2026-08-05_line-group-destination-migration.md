@@ -6,6 +6,7 @@
 
 - Production Worker baseline was committed locally as a separate commit: `dfe2971`
 - Feature branch: `feat/line-destination-routing`
+- Local feature implementation commit: `b88f7e0`
 - Active Production Version／Deploymentは変更していない
 - Production Cron、D1、Secrets、Variables、Webhookは変更していない
 - Production通知先はpersonalのまま維持
@@ -22,6 +23,14 @@
 - `scripts/set-line-destination.ps1` と `-WhatIf`
 - CHANGELOGとrunbook
 - ローカル検証結果: `docs/status/2026-08-05_line-group-destination-validation.md`
+
+## Validation summary
+
+- Worker: typecheck passed; 5 files / 100 tests passed
+- Python: 70 tests passed
+- Wrangler main／Capture／Dormant dry-run passed
+- PowerShell switch script syntax and both `-WhatIf` modes passed
+- Staged-file secret、LINE ID、absolute-path scan passed
 
 ## Not performed
 
