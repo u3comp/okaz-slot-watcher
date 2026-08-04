@@ -3,6 +3,7 @@
 作業日: 2026-08-05 JST（再検証開始 00:45頃）
 作業ブランチ: `feat/line-destination-routing`
 修正基点: `ca8e2eee9376cd1cf884ebf526b03607c8f7f608`
+直近検証HEAD: `799ae7f5bc4eb78ab32ef3cd5c665323d10948d8`
 
 ## Required checks
 
@@ -10,7 +11,7 @@
 |---|---|
 | Worker `npm run typecheck` | pass |
 | Worker `npm test` | pass（5 files / 104 tests） |
-| Python `pytest -q` | pass（既存＋追加） |
+| Python `pytest -q` | pass（77 tests） |
 | Capture default fetch／専用event／tail Orchestrator | pass |
 | Switch-script WhatIf read-only preflight | pass（personal; no write command） |
 | Switch-script mismatch／rollback failure-injection | pass |
@@ -23,8 +24,8 @@ WhatIfはGitHub認証、Cloudflare Account、Active Version 100%、D1、lease、
 ## Security scan classification
 
 - actual credential detected: 0
-- credential-like fixture detected: 最終ZIP生成時に分類件数を記録
-- allowlisted fixture: 最終ZIP生成時に分類件数を記録
+- credential-like fixture detected: 35
+- allowlisted fixture: 35（tests配下のdummy fixture、値は転載しない）
 - unresolved credential-like match: 0
 - LINE ID pattern: 0
 - unsafe archive path: 0

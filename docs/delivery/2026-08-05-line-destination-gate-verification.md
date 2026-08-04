@@ -3,6 +3,7 @@
 作業日: 2026-08-05 JST（差戻し修正）
 状態: `HUMAN_CHECKPOINT_B_REVIEW_PENDING`
 修正基点: `ca8e2eee9376cd1cf884ebf526b03607c8f7f608`
+直近検証HEAD: `799ae7f5bc4eb78ab32ef3cd5c665323d10948d8`
 
 ## Repair evidence
 
@@ -16,12 +17,12 @@
 
 - Worker typecheck: pass
 - Worker tests: 5 files / 104 tests pass
-- Python tests: pass in project venv (including switch-script and config tests)
+- Python tests: 77 passed in project venv (including switch-script and config tests)
 - WhatIf personal: read-only preflight pass; no write command
 - Mismatch and failure-injection tests: pass
 - Workflow YAML, PowerShell syntax, diff check: pass
 - Main/Capture/Dormant Wrangler dry-run: local-only pass
-- Credential scan: actual credentials 0; fixture-like matches classified and allowlisted; unresolved 0
+- Credential scan: actual credentials 0; fixture-like matches 35 and allowlisted 35; unresolved 0
 
 ## External state
 

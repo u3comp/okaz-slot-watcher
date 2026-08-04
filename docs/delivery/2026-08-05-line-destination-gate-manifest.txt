@@ -3,6 +3,7 @@ Scope: local implementation and Human Checkpoint B repair only
 Work date: 2026-08-05 JST
 Feature branch: feat/line-destination-routing
 Repair base: ca8e2eee9376cd1cf884ebf526b03607c8f7f608
+Latest packaged source HEAD before final evidence commit: 799ae7f5bc4eb78ab32ef3cd5c665323d10948d8
 
 Included source and review files:
 .gitignore
