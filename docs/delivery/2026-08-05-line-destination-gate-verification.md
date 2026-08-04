@@ -1,28 +1,32 @@
-# Completion Verification — LINE Destination Gate
+# Completion Verification — LINE Destination Gate Repair
 
-作業日: 2026-08-05 JST
+作業日: 2026-08-05 JST（差戻し修正）
+状態: `HUMAN_CHECKPOINT_B_REVIEW_PENDING`
+修正基点: `ca8e2eee9376cd1cf884ebf526b03607c8f7f608`
 
-この成果物はProduction切替前のローカル実装とHuman Checkpoint B待ちの検証結果です。
+## Repair evidence
 
-- Worker typecheck: passed
-- Worker tests: 5 files / 100 passed
-- Python tests: 70 passed
-- Workflow YAML parse: passed
-- PowerShell switch script syntax: passed
-- `-WhatIf` personal/group: passed
-- Wrangler main/Capture/Dormant dry-run: passed
-- staged-file secret、LINE ID、絶対パス検査: clean
-- Production Upload／Deploy、Cron、D1、Secret、Variable、Webhook、remote push: not performed
+- Capture default export emits one dedicated machine-readable tail event for the first valid signed group event.
+- Local Orchestrator consumes tail output in memory, transfers through callbacks, stops on first success, and never prints or persists the ID.
+- Capture isolate state is documented as best-effort; Orchestrator receipt is authoritative.
+- Canonical production config is tracked at `cloudflare-worker/wrangler.production.toml` with the verified Worker, D1, flags, target URL, and `* * * * *` Cron; secret values are absent.
+- Switch script performs repository/account/active-version/mode/D1/lease/config preflight, target-version checks, post-checks, and rollback with `INCONSISTENT_DESTINATION_STATE` fail-stop.
 
-## Post-fix recheck
+## Validation
 
-Health mode output was constrained to `personal`, `group`, or `invalid` so an
-unexpected runtime value cannot be echoed. The final recheck completed on
-2026-08-05 JST:
+- Worker typecheck: pass
+- Worker tests: 5 files / 104 tests pass
+- Python tests: pass in project venv (including switch-script and config tests)
+- WhatIf personal: read-only preflight pass; no write command
+- Mismatch and failure-injection tests: pass
+- Workflow YAML, PowerShell syntax, diff check: pass
+- Main/Capture/Dormant Wrangler dry-run: local-only pass
+- Credential scan: actual credentials 0; fixture-like matches classified and allowlisted; unresolved 0
 
-- Worker typecheck: 00:26:55–00:26:57, exit 0
-- Worker tests: 00:26:57–00:27:02, 5 files / 100 passed, exit 0
-- Python tests: 00:27:02–00:27:03, 70 passed, exit 0
-- Main Worker Wrangler dry-run: 00:27:03–00:27:05, exit 0
+## External state
 
-Archive SHA-256 is reported in the final handoff because embedding a ZIP's own hash would be self-referential.
+No Production Worker Upload/Deploy, Capture/Dormant Deploy, Cron, D1, GitHub Secret/Variable, LINE Webhook, remote push, or main integration was performed. No notification was sent.
+
+## Human gate
+
+Human review and approval of Checkpoint B remain required before any webhook, secret, upload, deploy, or destination switch operation.

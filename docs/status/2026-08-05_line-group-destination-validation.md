@@ -1,40 +1,34 @@
 # LINE Destination Routing — Local Validation Report
 
-作業日: 2026-08-05 JST
+作業日: 2026-08-05 JST（再検証開始 00:45頃）
 作業ブランチ: `feat/line-destination-routing`
+修正基点: `ca8e2eee9376cd1cf884ebf526b03607c8f7f608`
 
-## Validation commands
+## Required checks
 
-| Check | Start (JST) | End (JST) | Exit |
-|---|---:|---:|---:|
-| Worker `npm run typecheck` | 00:20:43 | 00:20:46 | 0 |
-| Worker `npm test` | 00:20:46 | 00:20:53 | 0 |
-| Python `pytest -q` | 00:20:53 | 00:20:54 | 0 |
-| Python `compileall` | 00:20:54 | 00:20:54 | 0 |
-| Workflow YAML parse | 00:20:54 | 00:20:55 | 0 |
-| PowerShell switch-script syntax | 00:20:55 | 00:20:55 | 0 |
-| `git diff --cached --check` | 00:20:55 | 00:20:55 | 0 |
-| `set-line-destination.ps1 -Mode personal -WhatIf` | 00:20:55 | 00:20:55 | 0 |
-| `set-line-destination.ps1 -Mode group -WhatIf` | 00:20:55 | 00:20:56 | 0 |
-| Main Worker Wrangler dry-run | 00:20:56 | 00:20:58 | 0 |
-| Capture Worker Wrangler dry-run | 00:20:58 | 00:21:01 | 0 |
-| Dormant Worker Wrangler dry-run | 00:21:01 | 00:21:04 | 0 |
+| Check | Result |
+|---|---|
+| Worker `npm run typecheck` | pass |
+| Worker `npm test` | pass（5 files / 104 tests） |
+| Python `pytest -q` | pass（既存＋追加） |
+| Capture default fetch／専用event／tail Orchestrator | pass |
+| Switch-script WhatIf read-only preflight | pass（personal; no write command） |
+| Switch-script mismatch／rollback failure-injection | pass |
+| Production config TOML／Cron／D1／secret-free checks | pass |
+| Workflow YAML／PowerShell syntax／`git diff --check` | pass |
+| Main／Capture／Dormant Wrangler dry-run | local-only pass |
 
-## Results
+WhatIfはGitHub認証、Cloudflare Account、Active Version 100%、D1、lease、canonical Cron記載、modeを読み取る。Health URL未指定時はVersion metadata modeを使用し、実HTTP probeは行わない。
 
-- Worker tests: 5 files / 100 tests passed
-- Python tests: 70 passed
-- Main Worker dry-run: 36.41 KiB upload / 9.01 KiB gzip
-- Capture Worker dry-run: 3.50 KiB upload / 1.31 KiB gzip / no bindings
-- Dormant Worker dry-run: 0.55 KiB upload / 0.31 KiB gzip / no bindings
-- Secret-like literal scan of staged files: clean
-- LINE ID pattern scan: 0 matches
-- Absolute user-path scan: 0 matches
-- Unsafe staged filenames: none
+## Security scan classification
+
+- actual credential detected: 0
+- credential-like fixture detected: 最終ZIP生成時に分類件数を記録
+- allowlisted fixture: 最終ZIP生成時に分類件数を記録
+- unresolved credential-like match: 0
+- LINE ID pattern: 0
+- unsafe archive path: 0
 
 ## External state
 
-- Production Worker upload／deploy: not performed
-- Production Cron／D1／Secrets／Variables／Webhook: unchanged
-- GitHub remote push: not performed
-- Human Checkpoint B: pending
+Production Worker upload／deploy、Cron、D1、GitHub Secrets／Variables、LINE Webhook、remote push、main統合は実施していない。Human Checkpoint Bは未承認。

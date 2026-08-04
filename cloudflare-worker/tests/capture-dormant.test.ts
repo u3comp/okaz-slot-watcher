@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createCaptureSession, extractGroupId, handleCaptureRequest } from "../capture-worker/src/index";
+import { captureGroupIdFromTail, createTailLineStream } from "../capture-worker/orchestrator";
 import { dormantResponse } from "../dormant-worker/src/index";
 
 async function signature(secret: string, body: string): Promise<string> {
@@ -12,9 +13,13 @@ async function signature(secret: string, body: string): Promise<string> {
 }
 
 describe("local Capture Worker", () => {
-  it("accepts only a signed group event and never returns the groupId", async () => {
+  it("accepts only a signed group event and emits one dedicated event", async () => {
     const secret = "capture-secret-fixture";
     const body = JSON.stringify({ events: [{ webhookEventId: "event-1", source: { type: "group", groupId: "group-fixture" } }] });
+    const logs: string[] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => logs.push(args.join(" "));
+    try {
     const response = await handleCaptureRequest(
       new Request("https://capture.invalid", { method: "POST", body, headers: { "x-line-signature": await signature(secret, body) } }),
       { LINE_CHANNEL_SECRET: secret },
@@ -23,6 +28,11 @@ describe("local Capture Worker", () => {
     const responseText = await response.text();
     expect(responseText).toBe("captured");
     expect(responseText).not.toContain("group-fixture");
+    expect(logs).toHaveLength(1);
+    expect(JSON.parse(logs[0])).toEqual({ event: "line_group_id_capture", group_id: "group-fixture" });
+    } finally {
+      console.log = originalLog;
+    }
   });
 
   it("rejects invalid signatures and ignores non-group events", async () => {
@@ -46,6 +56,52 @@ describe("local Capture Worker", () => {
     const init = { method: "POST", body, headers: { "x-line-signature": await signature(secret, body) } } as RequestInit;
     expect((await handleCaptureRequest(new Request("https://capture.invalid", init), { LINE_CHANNEL_SECRET: secret }, session)).status).toBe(200);
     expect((await handleCaptureRequest(new Request("https://capture.invalid", init), { LINE_CHANNEL_SECRET: secret }, session)).status).toBe(204);
+  });
+
+  it("uses the default exported fetch path", async () => {
+    const secret = "capture-secret-fixture";
+    const body = JSON.stringify({ events: [{ source: { type: "group", groupId: "group-fetch" } }] });
+    const originalLog = console.log;
+    const logs: string[] = [];
+    console.log = (...args: unknown[]) => logs.push(args.join(" "));
+    try {
+      const response = await (await import("../capture-worker/src/index")).default.fetch(
+        new Request("https://capture.invalid", { method: "POST", body, headers: { "x-line-signature": await signature(secret, body) } }),
+        { LINE_CHANNEL_SECRET: secret },
+      );
+      expect(response.status).toBe(200);
+      expect(logs).toHaveLength(1);
+    } finally {
+      console.log = originalLog;
+    }
+  });
+});
+
+describe("local Capture Orchestrator", () => {
+  it("transfers the first valid group event without printing or persisting it", async () => {
+    const calls: string[] = [];
+    const result = await captureGroupIdFromTail(
+      createTailLineStream(["noise", JSON.stringify({ event: "line_group_id_capture", group_id: "group-first" }), JSON.stringify({ event: "line_group_id_capture", group_id: "group-second" })]),
+      { setGitHubSecret: async (id) => { calls.push(`github:${id}`); }, setCloudflareSecret: async (id) => { calls.push(`cloudflare:${id}`); } },
+    );
+    expect(result).toEqual({ transferred: true, reason: "captured" });
+    expect(calls).toEqual(["github:group-first", "cloudflare:group-first"]);
+  });
+
+  it("does not transfer invalid or non-group events", async () => {
+    const calls: string[] = [];
+    const result = await captureGroupIdFromTail(createTailLineStream([JSON.stringify({ event: "other", group_id: "group-no" }), "not-json"]), { setGitHubSecret: async (id) => { calls.push(id); } });
+    expect(result.reason).toBe("tail_disconnected");
+    expect(calls).toEqual([]);
+  });
+
+  it("stops safely on tail timeout and transfer failure", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const timeout = await captureGroupIdFromTail(createTailLineStream([JSON.stringify({ event: "line_group_id_capture", group_id: "group-timeout" })]), {}, controller.signal);
+    expect(timeout.reason).toBe("timeout");
+    const failure = await captureGroupIdFromTail(createTailLineStream([JSON.stringify({ event: "line_group_id_capture", group_id: "group-fail" })]), { setGitHubSecret: async () => { throw new Error("fixture"); } });
+    expect(failure.reason).toBe("transfer_failed");
   });
 });
 

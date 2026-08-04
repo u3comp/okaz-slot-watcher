@@ -19,6 +19,12 @@
 - Worker本文のSecret類似リテラル検査: 0件
 - ProductionへのUpload、Deploy、Cron、D1、Secret、Variable変更: なし
 
+## Canonical local configuration
+
+- `cloudflare-worker/wrangler.production.toml` is the tracked production config.
+- It records the verified Worker name, compatibility date, D1 ID, `DRY_RUN=false`, `LINE_ENABLED=true`, personal mode, target page URL, and effective `* * * * *` Cron.
+- Secret bindings are names only; no secret values are present.
+
 ## Scope
 
 この文書にはLINE User ID、groupId、Channel Secret、Channel Access Token、Webhook URL、個人情報を記録しない。

@@ -1,51 +1,60 @@
 Archive: okaz-slot-watcher-line-destination-gate-20260805.zip
-Scope: local implementation and Human Checkpoint B gate only
+Scope: local implementation and Human Checkpoint B repair only
+Work date: 2026-08-05 JST
+Feature branch: feat/line-destination-routing
+Repair base: ca8e2eee9376cd1cf884ebf526b03607c8f7f608
 
-Included:
-- .gitignore
-- .github/workflows/availability-watcher.yml
-- .github/workflows/cloudflare-worker-ci.yml
-- CHANGELOG.md
-- requirements.txt
-- requirements-dev.txt
-- watcher/cli.py
-- watcher/line.py
-- watcher/line_destination.py
-- tests/test_line.py
-- tests/test_integrations.py
-- tests/test_line_destination.py
-- tests/fixtures/sold_out.html
-- tests/fixtures/one_available.html
-- tests/fixtures/multiple_available.html
-- tests/fixtures/missing.html
-- tests/fixtures/dom_changed.html
-- cloudflare-worker/README.md
-- cloudflare-worker/package.json
-- cloudflare-worker/package-lock.json
-- cloudflare-worker/schema.sql
-- cloudflare-worker/tsconfig.json
-- cloudflare-worker/wrangler.toml.example
-- cloudflare-worker/wrangler.diagnostic-paused.toml
-- cloudflare-worker/src/index.ts
-- cloudflare-worker/tests/index.test.ts
-- cloudflare-worker/tests/delivery.test.ts
-- cloudflare-worker/tests/repeat.test.ts
-- cloudflare-worker/tests/destination.test.ts
-- cloudflare-worker/tests/capture-dormant.test.ts
-- cloudflare-worker/capture-worker/README.md
-- cloudflare-worker/capture-worker/src/index.ts
-- cloudflare-worker/capture-worker/wrangler.toml
-- cloudflare-worker/capture-worker/wrangler.toml.example
-- cloudflare-worker/dormant-worker/README.md
-- cloudflare-worker/dormant-worker/src/index.ts
-- cloudflare-worker/dormant-worker/wrangler.toml
-- cloudflare-worker/dormant-worker/wrangler.toml.example
-- scripts/set-line-destination.ps1
-- docs/runbooks/line-destination-switch.md
-- docs/status/2026-08-05_production-worker-baseline.md
-- docs/status/2026-08-05_line-group-destination-migration.md
-- docs/status/2026-08-05_line-group-destination-validation.md
-- docs/delivery/2026-08-05-line-destination-gate-manifest.txt
-- docs/delivery/2026-08-05-line-destination-gate-verification.md
+Included source and review files:
+.gitignore
+.github/workflows/availability-watcher.yml
+.github/workflows/cloudflare-worker-ci.yml
+CHANGELOG.md
+requirements.txt
+requirements-dev.txt
+watcher/cli.py
+watcher/line.py
+watcher/line_destination.py
+tests/test_line.py
+tests/test_integrations.py
+tests/test_line_destination.py
+tests/test_production_config.py
+tests/test_switch_script.py
+tests/fixtures/sold_out.html
+tests/fixtures/one_available.html
+tests/fixtures/multiple_available.html
+tests/fixtures/missing.html
+tests/fixtures/dom_changed.html
+tests/fixtures/switch-gate-cases.json
+cloudflare-worker/README.md
+cloudflare-worker/package.json
+cloudflare-worker/package-lock.json
+cloudflare-worker/schema.sql
+cloudflare-worker/tsconfig.json
+cloudflare-worker/wrangler.production.toml
+cloudflare-worker/wrangler.toml.example
+cloudflare-worker/wrangler.diagnostic-paused.toml
+cloudflare-worker/src/index.ts
+cloudflare-worker/tests/index.test.ts
+cloudflare-worker/tests/delivery.test.ts
+cloudflare-worker/tests/repeat.test.ts
+cloudflare-worker/tests/destination.test.ts
+cloudflare-worker/tests/capture-dormant.test.ts
+cloudflare-worker/capture-worker/README.md
+cloudflare-worker/capture-worker/src/index.ts
+cloudflare-worker/capture-worker/orchestrator.ts
+cloudflare-worker/capture-worker/wrangler.toml
+cloudflare-worker/capture-worker/wrangler.toml.example
+cloudflare-worker/dormant-worker/README.md
+cloudflare-worker/dormant-worker/src/index.ts
+cloudflare-worker/dormant-worker/wrangler.toml
+cloudflare-worker/dormant-worker/wrangler.toml.example
+scripts/set-line-destination.ps1
+docs/runbooks/line-destination-switch.md
+docs/status/2026-08-05_production-worker-baseline.md
+docs/status/2026-08-05_line-group-destination-migration.md
+docs/status/2026-08-05_line-group-destination-validation.md
+docs/delivery/2026-08-05-line-destination-gate-manifest.txt
+docs/delivery/2026-08-05-line-destination-gate-verification.md
+docs/delivery/2026-08-05-line-destination-gate-checksums.sha256
 
 Excluded: secrets, IDs, tokens, Webhook URLs, .git, environments, node_modules, .wrangler, caches, bytecode, ignored production wrangler.toml, prior unrelated reports, pnpm artifacts.

@@ -1,12 +1,14 @@
-# LINE Group Destination Migration (Pending)
+# LINE Group Destination Migration (Human Checkpoint B pending)
 
-作業日時: 2026-08-05 JST（開始 00:08頃）
+作業日時: 2026-08-05 JST（差戻し修正開始 00:45頃）
+作業ブランチ: `feat/line-destination-routing`
+修正対象の基点: `ca8e2eee9376cd1cf884ebf526b03607c8f7f608`
 
 ## Confirmed facts
 
 - Production Worker baseline was committed locally as a separate commit: `dfe2971`
 - Feature branch: `feat/line-destination-routing`
-- Local feature implementation commit: `b88f7e0`
+- Gate repair starts from `ca8e2eee9376cd1cf884ebf526b03607c8f7f608`; no obsolete `b88f7e0` claim remains.
 - Active Production Version／Deploymentは変更していない
 - Production Cron、D1、Secrets、Variables、Webhookは変更していない
 - Production通知先はpersonalのまま維持
@@ -19,18 +21,19 @@
 - 未設定personal、明示personal、明示group、不正値fail-closed
 - GitHub `line_test`専用destination override
 - Cloudflare `/health` の非機密状態応答
-- Capture WorkerとDormant sinkのローカル実装
-- `scripts/set-line-destination.ps1` と `-WhatIf`
+- Capture Workerの専用tailイベントとローカルOrchestrator（IDを表示・永続化しない）
+- `scripts/set-line-destination.ps1` の読み取りpreflight、target確認、post-check、rollback
+- Production正本 `cloudflare-worker/wrangler.production.toml`
 - CHANGELOGとrunbook
 - ローカル検証結果: `docs/status/2026-08-05_line-group-destination-validation.md`
 
 ## Validation summary
 
-- Worker: typecheck passed; 5 files / 100 tests passed
-- Python: 70 tests passed
+- Worker: typecheck passed; 5 files / 104 tests passed
+- Python: 既存＋追加テストを再実行
 - Wrangler main／Capture／Dormant dry-run passed
-- PowerShell switch script syntax and both `-WhatIf` modes passed
-- Staged-file secret、LINE ID、absolute-path scan passed
+- PowerShell switch-script syntax、personal WhatIf read-only preflight、failure-injection passed
+- fixture分類付きsecret scan、LINE ID、absolute-path scanを実施
 
 ## Not performed
 
@@ -50,4 +53,4 @@
 
 ## Status
 
-`HUMAN_CHECKPOINT_B_PENDING`
+`HUMAN_CHECKPOINT_B_REVIEW_PENDING`

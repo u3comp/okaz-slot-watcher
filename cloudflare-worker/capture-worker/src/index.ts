@@ -7,6 +7,11 @@ export interface CaptureSession {
   seenEventIds: Set<string>;
 }
 
+export interface GroupCaptureEvent {
+  event: "line_group_id_capture";
+  group_id: string;
+}
+
 export function createCaptureSession(): CaptureSession {
   return { captured: false, seenEventIds: new Set<string>() };
 }
@@ -61,6 +66,14 @@ function response(status: number, body?: string): Response {
   return new Response(body, { status, headers: { "cache-control": "no-store" } });
 }
 
+function emitGroupCaptureEvent(groupId: string): void {
+  // This is the only intentional log line. A local `wrangler tail` process
+  // consumes the dedicated machine-readable event; ordinary webhook content,
+  // user IDs, and message text are never logged.
+  const event: GroupCaptureEvent = { event: "line_group_id_capture", group_id: groupId };
+  console.log(JSON.stringify(event));
+}
+
 export async function handleCaptureRequest(
   request: Request,
   env: CaptureEnv,
@@ -93,8 +106,7 @@ export async function handleCaptureRequest(
     const groupId = extractGroupId({ events: [event] });
     if (!groupId) continue;
     session.captured = true;
-    // The ID is intentionally not returned or logged. A human-controlled
-    // one-shot transfer must handle the value outside Worker logs/storage.
+    emitGroupCaptureEvent(groupId);
     return response(200, "captured");
   }
   return response(204);
@@ -102,6 +114,9 @@ export async function handleCaptureRequest(
 
 export default {
   async fetch(request: Request, env: CaptureEnv): Promise<Response> {
+    // Isolates may be recreated between requests, so this default path only
+    // provides best-effort duplicate suppression. The local orchestrator is
+    // the authoritative one-shot stop condition.
     return handleCaptureRequest(request, env);
   },
 };

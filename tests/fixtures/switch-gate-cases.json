@@ -1,0 +1,7 @@
+[
+  {"name": "deploy_failure", "expected": "stop_without_mutation"},
+  {"name": "github_variable_failure", "expected": "rollback_cloudflare"},
+  {"name": "post_check_failure", "expected": "rollback_cloudflare_and_github"},
+  {"name": "cloudflare_rollback_failure", "expected": "inconsistent_destination_state"},
+  {"name": "github_rollback_failure", "expected": "inconsistent_destination_state"}
+]

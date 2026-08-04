@@ -1,0 +1,26 @@
+# Canonical, reviewable production configuration. This file contains only
+# public deployment metadata and plain-text feature flags; secrets stay in
+# Cloudflare Secret bindings and are never declared with values here.
+name = "okaz-slot-watcher-cf"
+main = "src/index.ts"
+compatibility_date = "2026-08-02"
+
+[triggers]
+crons = ["* * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "okaz-slot-watcher"
+database_id = "04c229e8-a76b-40a8-a4b4-17c78bdcf6ff"
+
+[vars]
+DRY_RUN = "false"
+LINE_ENABLED = "true"
+LINE_DESTINATION_MODE = "personal"
+TARGET_PAGE_URL = "https://shop.okaz-design.jp/store/%E8%8C%A8%E3%81%A8%E6%9E%9C%E5%AE%9F-p850942259"
+
+# Secret bindings retained in Cloudflare (names only; no values in Git):
+# DISCORD_WEBHOOK_URL
+# LINE_CHANNEL_ACCESS_TOKEN
+# LINE_USER_ID
+# LINE_GROUP_ID (only for an approved group version)

@@ -1,4 +1,4 @@
-# LINE通知先切替Runbook（Pending）
+# LINE通知先切替Runbook（Human Checkpoint B pending）
 
 最終更新: 2026-08-05 JST
 
@@ -10,6 +10,7 @@
 - GitHub Actionsの通常監視は `LINE_TEST_DESTINATION` を無視し、Repository Variableだけを使う。
 - `line_test`だけが `configured` / `personal` / `group` の手動overrideを受け付ける。
 - Cloudflare Workerの `/health` はモードと設定有無だけを返し、ID値を返さない。
+- Productionの正本設定は `cloudflare-worker/wrangler.production.toml`。`.example`や無指定configをDeploy元にしない。
 
 ## Fail-closed
 
@@ -21,22 +22,23 @@
 
 ```powershell
 powershell -File scripts/set-line-destination.ps1 -Mode personal -WhatIf
-powershell -File scripts/set-line-destination.ps1 -Mode group -WhatIf
+# groupはレビュー済みVersion IDを指定した場合だけ対象確認できる
+powershell -File scripts/set-line-destination.ps1 -Mode group -WhatIf -CloudflareVersionId <reviewed-version-id>
 ```
 
-上記はGitHub、Cloudflare、Cron、D1、Secretを変更しない。
+上記はGitHub、Cloudflare、Cron、D1、Secretを変更せず、対象Repository／Account／Active Version／D1／lease／canonical Cron／modeを読み取り検査する。現在の個人Versionをgroup指定する場合はfail-closedとなる。
 
 ## Production切替（Human承認後のみ）
 
 1. personal／groupの両方で手動 `line_test` を実施し、人間が着信確認する。
 2. Cloudflare側のレビュー済みVersionを用意する。Version Upload／Deployは別承認とする。
-3. 次を実行し、Cloudflare Versionを先に昇格してからGitHub Variableを更新する。
+3. 次を実行し、Cloudflare Versionを先に昇格してからGitHub Variableを更新する。正本configを明示し、対象Versionのreview recordを必須とする。
 
 ```powershell
-powershell -File scripts/set-line-destination.ps1 -Mode group -Apply -CloudflareVersionId <approved-version-id>
+powershell -File scripts/set-line-destination.ps1 -Mode group -Apply -CloudflareVersionId <approved-version-id> -ApprovalRecord <review-record>
 ```
 
-4. 片側失敗時は追加通知を発生させず、状態を記録して停止する。
+4. 片側失敗時は前Versionと前Variableへrollbackし、事後preflightが通らなければ`INCONSISTENT_DESTINATION_STATE`として追加操作なしで停止する。
 
 ## ロールバック
 
@@ -48,7 +50,7 @@ Cloudflare Versionの承認済みIDがない場合は、推測でDeployせずHum
 
 ## Capture／Dormant
 
-Capture WorkerはHuman Checkpoint BまでDeployしない。Webhook URL登録後、署名検証済みのgroupイベントを一度だけ受け、groupIdを永続化せず安全な人間管理経路へ移送する。取得後はWebhook配送を無効化し、同じURLをDormant sinkへ置換し、Channel Secretを削除する。Webhook URLは空欄へ完全復元できない可能性を前提に、endpoint retained / delivery disabled / dormant sinkの状態を記録する。
+Capture WorkerはHuman Checkpoint BまでDeployしない。Webhook URL登録後は送信前に`wrangler tail`を開始し、署名検証済みgroupイベントの専用イベントをローカルOrchestratorが1件だけ受ける。groupIdは同一プロセスの標準入力へ直接渡し、表示・ファイル・環境変数・ログ・クリップボードへ保存しない。Worker isolateのSetによる重複抑止はbest effortであり、Orchestrator受領が正式停止条件。取得後は直ちにtail停止、Webhook配送停止、Dormant化へ進む。
 
 ## 秘密情報の取扱い
 
