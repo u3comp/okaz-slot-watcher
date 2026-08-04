@@ -160,7 +160,8 @@ export function lineDestinationStatus(env: Env): {
   line_user_id_configured: boolean;
   line_group_id_configured: boolean;
 } {
-  const mode = (env.LINE_DESTINATION_MODE ?? "personal").trim().toLowerCase() || "personal";
+  const configured = (env.LINE_DESTINATION_MODE ?? "personal").trim().toLowerCase() || "personal";
+  const mode = configured === "personal" || configured === "group" ? configured : "invalid";
   return {
     line_destination_mode: mode,
     line_user_id_configured: Boolean(env.LINE_USER_ID),
