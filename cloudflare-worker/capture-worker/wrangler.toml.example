@@ -1,0 +1,16 @@
+name = "line-group-id-endpoint"
+main = "src/index.ts"
+compatibility_date = "2026-08-02"
+
+[observability]
+enabled = false
+
+[observability.logs]
+enabled = false
+persist = false
+
+[observability.traces]
+enabled = false
+persist = false
+
+# Set LINE_CHANNEL_SECRET interactively only after Human Checkpoint B.

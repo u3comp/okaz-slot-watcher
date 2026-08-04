@@ -15,6 +15,15 @@ on:
           - discord_test
           - line_test
           - diagnostic
+      line_destination:
+        description: "line_test専用の送信先 override"
+        required: false
+        default: configured
+        type: choice
+        options:
+          - configured
+          - personal
+          - group
 
 permissions: {}
 
@@ -108,7 +117,10 @@ jobs:
       contents: read
     env:
       LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+      LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
+      LINE_DESTINATION_MODE: ${{ vars.LINE_DESTINATION_MODE }}
       LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+      LINE_TEST_DESTINATION: ${{ inputs.line_destination }}
       TZ: Asia/Tokyo
     steps:
       - name: Checkout
@@ -138,6 +150,8 @@ jobs:
       DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+      LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
+      LINE_DESTINATION_MODE: ${{ vars.LINE_DESTINATION_MODE }}
       LINE_ENABLED: ${{ vars.LINE_ENABLED }}
       LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
       TZ: Asia/Tokyo

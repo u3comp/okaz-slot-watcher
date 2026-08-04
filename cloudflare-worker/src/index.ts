@@ -128,10 +128,44 @@ export interface Env {
   DB: D1Database;
   DRY_RUN?: string;
   LINE_ENABLED?: string;
+  LINE_DESTINATION_MODE?: string;
   TARGET_PAGE_URL?: string;
   DISCORD_WEBHOOK_URL?: string;
   LINE_CHANNEL_ACCESS_TOKEN?: string;
   LINE_USER_ID?: string;
+  LINE_GROUP_ID?: string;
+}
+
+export type LineDestinationMode = "personal" | "group";
+export type LineDestination = { mode: LineDestinationMode; destinationId: string };
+
+export function resolveLineDestination(
+  modeValue: string | undefined,
+  personalId: string | undefined,
+  groupId: string | undefined,
+  override: "configured" | "personal" | "group" = "configured",
+): LineDestination {
+  const configuredMode = (modeValue ?? "personal").trim().toLowerCase() || "personal";
+  const selectedMode = override === "configured" ? configuredMode : override;
+  if (selectedMode !== "personal" && selectedMode !== "group") {
+    throw new Error("line_destination_mode_invalid");
+  }
+  const destinationId = selectedMode === "personal" ? personalId : groupId;
+  if (!destinationId) throw new Error(`line_${selectedMode}_destination_missing`);
+  return { mode: selectedMode, destinationId };
+}
+
+export function lineDestinationStatus(env: Env): {
+  line_destination_mode: string;
+  line_user_id_configured: boolean;
+  line_group_id_configured: boolean;
+} {
+  const mode = (env.LINE_DESTINATION_MODE ?? "personal").trim().toLowerCase() || "personal";
+  return {
+    line_destination_mode: mode,
+    line_user_id_configured: Boolean(env.LINE_USER_ID),
+    line_group_id_configured: Boolean(env.LINE_GROUP_ID),
+  };
 }
 
 function nowJst(at = new Date()): string {
@@ -823,7 +857,19 @@ export async function deliverPending(
   scheduledAt = new Date(),
 ): Promise<boolean> {
   const before = JSON.stringify(state);
-  const lineConfigured = lineEnabled && Boolean(env.LINE_CHANNEL_ACCESS_TOKEN && env.LINE_USER_ID);
+  const lineConfigured = lineEnabled && Boolean(env.LINE_CHANNEL_ACCESS_TOKEN);
+  let lineDestination: LineDestination | undefined;
+  if (lineEnabled) {
+    try {
+      lineDestination = resolveLineDestination(
+        env.LINE_DESTINATION_MODE,
+        env.LINE_USER_ID,
+        env.LINE_GROUP_ID,
+      );
+    } catch {
+      lineDestination = undefined;
+    }
+  }
   preparePendingForDelivery(state, lineEnabled);
   for (const item of pendingDueForDelivery(state, scheduledAt)) {
     const discordDiagnostic = item.delivery!.discord!;
@@ -837,12 +883,12 @@ export async function deliverPending(
       else console.log(JSON.stringify({ event: "notification_delivery_failed", channel: "discord", error_class: item.delivery!.discord.last_error_class }));
     }
 
-    if (lineConfigured && item.channels.line === false) {
+    if (lineConfigured && lineDestination && item.channels.line === false) {
       const lineDiagnostic = item.delivery!.line!;
       if (lineDiagnostic.attempt_count >= MAX_DELIVERY_ATTEMPTS) lineDiagnostic.permanent_failure = true;
       if (shouldAttempt(lineDiagnostic)) {
         const result = await sendLine(
-          env.LINE_CHANNEL_ACCESS_TOKEN!, env.LINE_USER_ID!, item.message, item.line_retry_key!,
+          env.LINE_CHANNEL_ACCESS_TOKEN!, lineDestination.destinationId, item.message, item.line_retry_key!,
         );
         item.delivery!.line = {
           ...applyAttemptResult(lineDiagnostic, result, new Date()),
@@ -864,9 +910,17 @@ function validateStartup(env: Env): boolean {
     console.log("target_page_url_invalid");
     return false;
   }
-  if (env.LINE_ENABLED === "true" && (!env.LINE_CHANNEL_ACCESS_TOKEN || !env.LINE_USER_ID)) {
+  if (env.LINE_ENABLED === "true" && !env.LINE_CHANNEL_ACCESS_TOKEN) {
     console.log("line_secret_missing");
     return false;
+  }
+  if (env.LINE_ENABLED === "true") {
+    try {
+      resolveLineDestination(env.LINE_DESTINATION_MODE, env.LINE_USER_ID, env.LINE_GROUP_ID);
+    } catch (error) {
+      console.log(error instanceof Error ? error.message : "line_destination_invalid");
+      return false;
+    }
   }
   return true;
 }
@@ -975,5 +1029,14 @@ export default {
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(runOnce(env, new Date(event.scheduledTime)));
   },
-  async fetch(): Promise<Response> { return new Response("okaz-slot-watcher-cf", { status: 200 }); },
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    if (request.method === "GET" && url.pathname === "/health") {
+      return new Response(JSON.stringify(lineDestinationStatus(env)), {
+        status: 200,
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    }
+    return new Response("okaz-slot-watcher-cf", { status: 200 });
+  },
 };

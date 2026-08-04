@@ -15,14 +15,14 @@ class LineError(RuntimeError):
 
 def send_line(
     channel_access_token: str,
-    user_id: str,
+    destination_id: str,
     content: str,
     retry_key: str,
 ) -> None:
     if not channel_access_token:
         raise LineError("LINE_CHANNEL_ACCESS_TOKEN is not configured")
-    if not user_id:
-        raise LineError("LINE_USER_ID is not configured")
+    if not destination_id:
+        raise LineError("LINE destination is not configured")
     if not retry_key:
         raise LineError("LINE retry key is not configured")
     try:
@@ -32,7 +32,7 @@ def send_line(
 
     payload = json.dumps(
         {
-            "to": user_id,
+            "to": destination_id,
             "messages": [{"type": "text", "text": content}],
         },
         ensure_ascii=False,

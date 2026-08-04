@@ -2,3 +2,5 @@ node_modules/
 .wrangler/
 wrangler.toml
 .dev.vars
+!capture-worker/wrangler.toml
+!dormant-worker/wrangler.toml

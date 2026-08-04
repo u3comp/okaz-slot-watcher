@@ -10,6 +10,7 @@ from uuid import uuid4
 from .discord import DiscordError, send_discord
 from .github_state import GitHubIssueStore, GitHubStateError
 from .line import LineError, send_line
+from .line_destination import LineDestinationError, resolve_line_destination
 from .model import CUTOFF_JST, PRODUCT_URL, SLOTS, is_after_cutoff, now_jst
 from .state import enqueue_notification, remove_delivered_notifications, transition
 
@@ -64,10 +65,20 @@ def run_discord_test() -> int:
 
 def run_line_test() -> int:
     token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
-    user_id = os.environ.get("LINE_USER_ID", "")
+    personal_id = os.environ.get("LINE_USER_ID", "")
+    group_id = os.environ.get("LINE_GROUP_ID", "")
+    try:
+        destination = resolve_line_destination(
+            os.environ.get("LINE_DESTINATION_MODE"),
+            personal_id,
+            group_id,
+            os.environ.get("LINE_TEST_DESTINATION", "configured"),
+        )
+    except LineDestinationError as exc:
+        raise LineError(str(exc)) from None
     send_line(
         token,
-        user_id,
+        destination.destination_id,
         "【テスト通知】Personal Ops\n"
         "LINE通知経路は正常です。\n"
         f"送信時刻: {_timestamp()} (Asia/Tokyo)",
@@ -85,7 +96,19 @@ def run_normal() -> int:
     repository = os.environ.get("GITHUB_REPOSITORY", "")
     line_enabled = os.environ.get("LINE_ENABLED", "") == "true"
     line_token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "") if line_enabled else ""
-    line_user_id = os.environ.get("LINE_USER_ID", "") if line_enabled else ""
+    line_personal_id = os.environ.get("LINE_USER_ID", "") if line_enabled else ""
+    line_group_id = os.environ.get("LINE_GROUP_ID", "") if line_enabled else ""
+    line_destination_error: LineDestinationError | None = None
+    line_destination = None
+    if line_enabled:
+        try:
+            line_destination = resolve_line_destination(
+                os.environ.get("LINE_DESTINATION_MODE"),
+                line_personal_id,
+                line_group_id,
+            )
+        except LineDestinationError as exc:
+            line_destination_error = exc
     if not webhook:
         raise DiscordError("DISCORD_WEBHOOK_URL is not configured")
     if not token or not repository:
@@ -122,9 +145,11 @@ def run_normal() -> int:
                 delivery_errors.add("discord")
         if "line" in channels and not channels["line"] and line_enabled:
             try:
+                if line_destination_error is not None or line_destination is None:
+                    raise LineError(str(line_destination_error or "LINE destination is not configured"))
                 send_line(
                     line_token,
-                    line_user_id,
+                    line_destination.destination_id,
                     notification["message"],
                     notification["id"],
                 )

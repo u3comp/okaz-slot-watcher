@@ -13,8 +13,14 @@ database_id = "REPLACE_AFTER_D1_CREATE"
 [vars]
 # Keep this true until Cloudflare-side dry-run verification is complete.
 DRY_RUN = "true"
+LINE_ENABLED = "true"
+# personal is the backward-compatible default. Use group only after the
+# separate group destination gate has passed.
+LINE_DESTINATION_MODE = "personal"
+TARGET_PAGE_URL = "https://shop.okaz-design.jp/store/%E8%8C%A8%E3%81%A8%E6%9E%9C%E5%AE%9F-p850942259"
 
 # Store these with `wrangler secret put`; never commit values.
 # DISCORD_WEBHOOK_URL
 # LINE_CHANNEL_ACCESS_TOKEN
 # LINE_USER_ID
+# LINE_GROUP_ID
