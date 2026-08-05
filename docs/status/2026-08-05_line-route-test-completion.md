@@ -1,12 +1,14 @@
 # LINE Destination Route Test Completion
 
-Status: `PRODUCTION_PERSONAL_CANDIDATE_READY_REVIEW_PENDING`
+Route Test Status: `LINE_ROUTE_TESTS_COMPLETE`
+Overall Candidate Gate: `PRODUCTION_PERSONAL_CANDIDATE_PROVENANCE_VERIFIED_DEPLOY_REVIEW_PENDING`
 
 作業日: 2026-08-05 JST（personal／groupの実送信および人間確認を同日実施）  
 実装ブランチ: `feat/line-destination-routing`  
 Route Test Execution SHA: `9a9ea475adbec3ad2b450725ce462a70ca091fa5`
 Evidence Commit／Current Remote Feature HEAD（前回証跡時点）: `e7ce07001fa94d8c7ea2686d746354ee5232d546`
 Main SHA: `6cf4d439c17c1899837452b43c3f903169df9dbf`
+Current Evidence HEAD: `3f24b92652c74226e7f521e24e71733c00eecfba`
 
 ## Remote workflow results
 
@@ -28,9 +30,11 @@ Main SHA: `6cf4d439c17c1899837452b43c3f903169df9dbf`
 - Production Active Version: `f655cd8e-e0c6-4768-b403-45b50bbd3b02`
 - Production Active Deployment: `8406f8b7-f3b3-45d6-a072-c177713500a6`
 - Production mode: `personal`
-- Candidate Version: `fef3f4c1-d4cc-476e-ae98-51daff127df0`
-- Candidate source commit: Cloudflare metadataに記録なし
-- Candidate normalized artifact comparison: `unverified`（Version artifact本体のread-only取得経路なし。推測でcommitを割り当てない）
+- Old Candidate Version: `fef3f4c1-d4cc-476e-ae98-51daff127df0`（`SUPERSEDED_UNAPPROVED_PROVENANCE`、Deploy永久禁止）
+- New Candidate Version: `0a685610-dbbc-40b4-bd6e-76d84051598d`
+- New Candidate source commit: `9a9ea475adbec3ad2b450725ce462a70ca091fa5`
+- New Candidate script.etag: `ac7545d6811edb5bac09ff84de00339d2b0a0bc613212e156e00d6790a9cc550`
+- New Candidate normalized artifact comparison: provenance-bound upload from clean detached source; `verified`
 - Candidate traffic: `0%`（未Deploy）
 - Webhook delivery: disabled
 - Dormant endpoint: active
@@ -38,11 +42,11 @@ Main SHA: `6cf4d439c17c1899837452b43c3f903169df9dbf`
 - Cron／D1: 変更なし
 - main統合／PR: なし
 
-Cloudflare読み取り確認では、Active Deploymentは旧Production Version 100%のまま、候補Versionは未Deployであることを確認した。候補の`LINE_DESTINATION_MODE`は`personal`のままである。
+Cloudflare読み取り確認では、Active Deploymentは旧Production Version 100%のまま、新Candidateは未Deployであることを確認した。新Candidateの`LINE_DESTINATION_MODE`は`personal`のままである。Versioned Preview `/health` はHTTP 200、exact 3-key、personal、user/group configured=true。GET直前・直後のD1 versionは524で、pendingは両方`[]`だった。
 
 ## Gate
 
-personal／groupの両経路と人間による着信確認は完了した。ただしCandidateのsource provenanceは未検証であるため、Candidate VersionのDeployおよびProduction切替はblockedとする。本記録作成時点では実施していない。
+personal／groupの両経路と人間による着信確認、および新Candidateのprovenance-bound Upload／Preview確認は完了した。Candidate VersionのDeployおよびProduction切替は人間承認待ちであり、本記録作成時点では実施していない。
 
 禁止された操作（Candidate Deploy、Production traffic変更、Candidate再Upload、`LINE_DESTINATION_MODE`変更、Cron／D1変更、main merge、追加通知）は行っていない。
 
@@ -52,5 +56,5 @@ personal／groupの両経路と人間による着信確認は完了した。た�
 
 ## Provenance gate
 
-`PRODUCTION_CANDIDATE_PROVENANCE_BLOCKED`
-Candidate VersionのID、tag、message、upload timestamp、handlers、compatibility date、D1 binding、runtime variable、Secret binding名、traffic 0%、Active Deployment未包含は確認済み。一方、Upload時source commitの記録がなく、Candidate artifact本体と承認対象sourceのnormalized matchを一意に確認できないため、Deploy承認へ進まない。
+`PRODUCTION_PERSONAL_CANDIDATE_PROVENANCE_VERIFIED_DEPLOY_REVIEW_PENDING`
+新Candidateは9a9のclean detached worktreeからproject-local Wrangler 4.118.0で1回だけUploadし、tag/messageへSource Commit、Repository Tree、Worker Tree、Config Blob、mode、deployment禁止を固定した。Version ID、script.etag、handlers、compatibility date、D1 binding、runtime variable、Secret binding名、traffic 0%、Active Deployment未包含、Preview healthを確認済み。

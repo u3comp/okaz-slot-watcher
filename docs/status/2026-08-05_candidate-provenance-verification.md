@@ -1,11 +1,11 @@
 # Candidate Provenance Verification
 
-判定: `PRODUCTION_CANDIDATE_PROVENANCE_BLOCKED`
+判定: `PRODUCTION_PERSONAL_CANDIDATE_PROVENANCE_VERIFIED_DEPLOY_REVIEW_PENDING`
 
 ## SHA roles
 
 - Route Test Execution SHA: `9a9ea475adbec3ad2b450725ce462a70ca091fa5`
-- Evidence Commit／Current Remote Feature HEAD（確認時）: `e7ce07001fa94d8c7ea2686d746354ee5232d546`
+- Evidence Commit／Current Remote Feature HEAD（確認時）: `3f24b92652c74226e7f521e24e71733c00eecfba`
 - Main SHA: `6cf4d439c17c1899837452b43c3f903169df9dbf`
 - Candidate Version: `fef3f4c1-d4cc-476e-ae98-51daff127df0`
 
@@ -21,13 +21,14 @@
 - `.github/workflows/`
 - `scripts/`
 
-## Candidate metadata (read-only)
+## New Candidate provenance-bound upload
 
-- Version ID: `fef3f4c1-d4cc-476e-ae98-51daff127df0`
-- tag: `line-destination-routing-personal-candidate-20260805`
-- message: `Upload reversible LINE destination routing candidate in personal mode; do not deploy`
+- Version ID: `0a685610-dbbc-40b4-bd6e-76d84051598d`
+- tag: `line-routing-personal-9a9ea475-provenance-r2`
+- message: `source_commit=9a9ea475adbec3ad2b450725ce462a70ca091fa5 repository_tree=e8ea8184e713fe4e485c27a2c71695ef35e85532 worker_tree=2433d61856e53a7cdd28eb8459c1dd94ce0c2319 config_blob=7f37031548a3b25a74f4217fe21ac165cafd3256 wrangler=4.118.0 mode=personal deployment=prohibited`
 - source: `wrangler`
-- upload timestamp: `2026-08-05T03:44:02.28066Z`
+- upload timestamp: `2026-08-05T06:03:26.443569Z`
+- script.etag: `ac7545d6811edb5bac09ff84de00339d2b0a0bc613212e156e00d6790a9cc550`
 - handlers: `scheduled`, `fetch`
 - compatibility date: `2026-08-02`
 - D1 binding: `DB` → `04c229e8-a76b-40a8-a4b4-17c78bdcf6ff`
@@ -38,6 +39,8 @@
 
 ## Provenance result
 
-Candidate Version metadataにはUpload時source commitがなく、Wrangler 4.118のread-only `versions view --json`はartifact本体を返さない。したがってCandidate artifactと承認対象sourceのnormalized matchは一意に証明できず、`artifact/version correspondence unverified` とする。Candidateの再Upload、Deploy、Production変更は行わない。
+Candidateは9a9のclean detached worktree（detached、tracked clean、submoduleなし、symlinkなし）からUploadした。tag/messageのSource Commit／Tree／Config Blob／Wranglerと、Version metadataのsource、etag、handlers、compatibility、binding、variableを一致確認した。Preview URLの`GET /health`はHTTP 200、exact 3-key、personal、user/group configured=true、未知キー0、ID値0。Preview GET直前・直後のD1 versionは524、pendingは両方`[]`。新Candidate trafficは0%、Active Deploymentは旧Version 100%のまま。
+
+Old Candidate `fef3f4c1-d4cc-476e-ae98-51daff127df0` は `SUPERSEDED_UNAPPROVED_PROVENANCE` として永久にDeploy対象外とする。新CandidateのDeploy、Production traffic変更、通知、Cron／D1変更は行わない。
 
 Secret値、User ID、groupId、Token、Webhook URLは取得・表示・保存していない。
