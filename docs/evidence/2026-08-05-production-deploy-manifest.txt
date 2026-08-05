@@ -3,6 +3,8 @@ generated_at_jst: 2026-08-05
 status: PRODUCTION_PERSONAL_ROUTING_FOUNDATION_ACTIVE_GROUP_SWITCH_REVIEW_PENDING
 source_commit: 9a9ea475adbec3ad2b450725ce462a70ca091fa5
 feature_head_before_evidence_commit: 471aa3c6deab551a196a57b213b94c047e70e061
+evidence_commit: 811fe7ac0fceeaa5fbe254f8b7f4df365bcef2e9
+packaged_tree_before_manifest_refresh: 8132a24d3aeabbc0f2ba4b08faf2ffd483c46f1b
 main_sha: 6cf4d439c17c1899837452b43c3f903169df9dbf
 candidate_version: 0a685610-dbbc-40b4-bd6e-76d84051598d
 deployment_id: 3a959931-add6-4ced-9cfb-6fc7d1ee962d
