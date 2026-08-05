@@ -2,6 +2,9 @@
 
 判定: `PRODUCTION_PERSONAL_CANDIDATE_PROVENANCE_VERIFIED_DEPLOY_REVIEW_PENDING`
 
+この文書はDeploy前の候補証跡であり、Deploy後の正本は
+`docs/status/2026-08-05_line-personal-candidate-production-deploy.md`です。
+
 ## Source provenance
 
 - Source Commit: `9a9ea475adbec3ad2b450725ce462a70ca091fa5`
@@ -24,8 +27,8 @@
 - D1 binding: `DB` → `04c229e8-a76b-40a8-a4b4-17c78bdcf6ff`
 - runtime variables: `DRY_RUN=false`, `LINE_ENABLED=true`, `LINE_DESTINATION_MODE=personal`
 - secret binding names: `DISCORD_WEBHOOK_URL`, `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_USER_ID`, `LINE_GROUP_ID`
-- candidate traffic: `0%`
-- Active Deployment: `8406f8b7-f3b3-45d6-a072-c177713500a6` with `f655cd8e-e0c6-4768-b403-45b50bbd3b02` at 100%; new Candidate not included
+- candidate traffic at upload: `0%`
+- Active Deployment at upload: `8406f8b7-f3b3-45d6-a072-c177713500a6` with `f655cd8e-e0c6-4768-b403-45b50bbd3b02` at 100%; new Candidate not included
 
 ## Preview and state safety
 
@@ -42,6 +45,6 @@
 
 `fef3f4c1-d4cc-476e-ae98-51daff127df0` remains at traffic 0% and is permanently excluded from deployment as `SUPERSEDED_UNAPPROVED_PROVENANCE`; it is not a rollback or promotion target.
 
-No Candidate Deploy, Production traffic change, Secret/Variable change, notification, Cron change, D1 write, main push, force push, tag, or PR was performed.
+At the time of this pre-deploy attestation, no Candidate Deploy, Production traffic change, Secret/Variable change, notification, Cron change, D1 write, main push, force push, tag, or PR had been performed. The later approved deployment is recorded separately in the Deploy-after status document.
 
 Secret values, User ID, groupId, Access Token, Webhook URL, Cookie, and Authorization values are not recorded.

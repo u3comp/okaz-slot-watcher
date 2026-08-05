@@ -2,6 +2,9 @@
 
 判定: `PRODUCTION_PERSONAL_CANDIDATE_PROVENANCE_VERIFIED_DEPLOY_REVIEW_PENDING`
 
+この文書はCandidateのDeploy前照合記録です。Deploy後の正本は
+`docs/status/2026-08-05_line-personal-candidate-production-deploy.md`です。
+
 ## SHA roles
 
 - Route Test Execution SHA: `9a9ea475adbec3ad2b450725ce462a70ca091fa5`
