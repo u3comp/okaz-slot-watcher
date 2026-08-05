@@ -95,6 +95,18 @@ $healthMode = 'unknown-key'; AssertThrows { Test-Health 'personal' $false } 'hea
 $healthMode = 'http-failure'; AssertThrows { Test-Health 'personal' $false } 'health HTTP status'
 $healthMode = 'personal-ok'
 
+$propagationCalls = 0
+function PropagationHealthFixture {
+    param([string]$Url)
+    $script:propagationCalls++
+    $mode = if ($script:propagationCalls -eq 1) { 'personal' } else { 'group' }
+    return [pscustomobject]@{ StatusCode = 200; Body = [pscustomobject]@{ line_destination_mode = $mode; line_user_id_configured = $true; line_group_id_configured = $true } }
+}
+$HealthAdapter = ${function:PropagationHealthFixture}
+$waitedHealth = Wait-HealthMode 'group' $true 'https://health.invalid/health' -TimeoutSeconds 1 -IntervalMilliseconds 1
+if (-not $waitedHealth.Checked -or $propagationCalls -ne 2) { throw 'health propagation wait failed' }
+$HealthAdapter = ${function:HealthFixture}
+
 $HealthAdapter = $null
 $httpHealthMode = 'ok'
 function Invoke-WebRequest {

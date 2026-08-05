@@ -76,7 +76,7 @@ function Invoke-GatedSwitch {
     $output = @(& powershell.exe @commandArgs 2>&1)
     $exitCode = $LASTEXITCODE
     $safeLines = @($output | ForEach-Object { [string]$_ } | Where-Object {
-        $_ -match '^(preflight|active_version|active_percentage|current_mode|target_version|health_probe|current_health_probe|target_health_probe|github_user_verified|effective_cron_probe|schedule_count|d1_state_valid|secrets_read|whatif|apply)='
+        $_ -match '^(preflight|active_version|active_percentage|current_mode|target_version|health_probe|current_health_probe|target_health_probe|github_user_verified|effective_cron_probe|schedule_count|d1_state_valid|secrets_read|whatif|deployment_health_probe|deployment_cron_probe|apply)='
     })
     $safeLines | Write-Output
     if ($exitCode -ne 0) {

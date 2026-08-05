@@ -57,6 +57,10 @@ def test_script_contains_transactional_rollback_contract():
         "line_group_id_configured",
         "GitHub user mismatch",
         "effective Cron could not be verified",
+        "Wait-HealthMode",
+        "effective Cron changed after deploy",
+        "deployment_health_probe=true",
+        "deployment_cron_probe=true",
         "ReadOnlyAdapter",
         "WriteAdapter",
     ):

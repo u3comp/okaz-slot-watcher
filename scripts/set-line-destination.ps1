@@ -242,6 +242,27 @@ function Test-Health {
     return Assert-HealthPayload $health $ExpectedMode $ExpectedGroupConfiguredValue
 }
 
+function Wait-HealthMode {
+    param(
+        [string]$ExpectedMode,
+        [bool]$ExpectedGroupConfiguredValue,
+        [string]$ProbeUrl,
+        [int]$TimeoutSeconds = 90,
+        [int]$IntervalMilliseconds = 3000
+    )
+    $stopwatch = [Diagnostics.Stopwatch]::StartNew()
+    do {
+        try {
+            return Test-Health $ExpectedMode $ExpectedGroupConfiguredValue $ProbeUrl
+        } catch {
+            if ($stopwatch.Elapsed.TotalSeconds -ge $TimeoutSeconds) {
+                throw 'Cloudflare health propagation timeout.'
+            }
+            Start-Sleep -Milliseconds $IntervalMilliseconds
+        }
+    } while ($true)
+}
+
 function Invoke-Preflight {
     if ($Repository -ne $ExpectedOwnerRepo) { throw 'repository mismatch.' }
     $configPath = Join-Path $repoRoot $ProductionConfig
@@ -348,10 +369,18 @@ $githubChanged = $false
 try {
     Invoke-WriteCommand 'wrangler' @('versions', 'deploy', "$CloudflareVersionId@100%", '--name', $WorkerName, '--config', $productionConfigPath, '--message', "Set LINE destination mode to $Mode", '-y')
     $cloudflareChanged = $true
+    $deployedHealthUrl = if (-not [string]::IsNullOrWhiteSpace($CurrentHealthUrl)) { $CurrentHealthUrl } elseif (-not [string]::IsNullOrWhiteSpace($HealthUrl)) { $HealthUrl } else { $null }
+    if ([string]::IsNullOrWhiteSpace($deployedHealthUrl)) { throw 'CurrentHealthUrl is required after deploy.' }
+    [void](Wait-HealthMode $Mode $preflight.TargetHealth.GroupConfigured $deployedHealthUrl)
+    $postDeployCron = Get-EffectiveCron
+    if (-not $postDeployCron.Available -or @($postDeployCron.Crons).Count -ne 1 -or @($postDeployCron.Crons)[0] -ne $ExpectedCron) { throw 'effective Cron changed after deploy.' }
+    [void](Get-D1Health)
     Invoke-WriteCommand 'gh' @('variable', 'set', 'LINE_DESTINATION_MODE', '--body', $Mode, '--repo', $Repository)
     $githubChanged = $true
     $post = Invoke-Preflight
     if ($post.Active.VersionId -ne $CloudflareVersionId -or $post.Active.Percentage -ne 100 -or $post.GithubMode -ne $Mode -or $post.CloudflareMode -ne $Mode -or -not $post.CurrentHealth.Checked -or -not $post.TargetHealth.Checked -or -not $post.D1.Valid -or -not $post.EffectiveCron.Available -or @($post.EffectiveCron.Crons).Count -ne 1 -or @($post.EffectiveCron.Crons)[0] -ne $ExpectedCron) { throw 'post-check failed.' }
+    Write-Output 'deployment_health_probe=true'
+    Write-Output 'deployment_cron_probe=true'
     Write-Output 'apply=passed'
 } catch {
     $rollbackOk = $true
