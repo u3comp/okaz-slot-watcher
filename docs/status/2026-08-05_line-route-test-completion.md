@@ -3,8 +3,8 @@
 Route Test Status: `LINE_ROUTE_TESTS_COMPLETE`
 Overall Candidate Gate: `PRODUCTION_PERSONAL_CANDIDATE_PROVENANCE_VERIFIED_DEPLOY_REVIEW_PENDING`
 
-作業日: 2026-08-05 JST（personal／groupの実送信および人間確認を同日実施）  
-実装ブランチ: `feat/line-destination-routing`  
+作業日: 2026-08-05 JST（personal／groupの実送信および人間確認を同日実施）
+実装ブランチ: `feat/line-destination-routing`
 Route Test Execution SHA: `9a9ea475adbec3ad2b450725ce462a70ca091fa5`
 Evidence Commit／Current Remote Feature HEAD（前回証跡時点）: `e7ce07001fa94d8c7ea2686d746354ee5232d546`
 Main SHA: `6cf4d439c17c1899837452b43c3f903169df9dbf`
