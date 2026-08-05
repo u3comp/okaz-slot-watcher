@@ -24,6 +24,8 @@ def test_launcher_uses_one_process_token_lifecycle_and_fail_closed_gates():
         "cloudflare-worker\\node_modules\\.bin",
         "project_cli_path_configured = $projectCliPathConfigured",
         "wrangler_cli_unavailable",
+        "Get-VersionPreviewHealthUrl",
+        "$VersionId.Substring(0, 8).ToLowerInvariant()",
         "ConvertTo-SafeErrorExcerpt",
         "safe_error_excerpt = $safeErrorExcerpt",
         "[REDACTED]",

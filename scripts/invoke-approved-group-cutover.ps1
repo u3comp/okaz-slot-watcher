@@ -13,8 +13,6 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $switchScript = Join-Path $PSScriptRoot 'set-line-destination.ps1'
 $resultPath = Join-Path ([IO.Path]::GetTempPath()) 'okaz-line-cutover-result.json'
 $productionHealth = 'https://okaz-slot-watcher-cf.u3comp.workers.dev/health'
-$groupHealth = "https://$GroupVersionId-okaz-slot-watcher-cf.u3comp.workers.dev/health"
-$personalHealth = "https://$PersonalVersionId-okaz-slot-watcher-cf.u3comp.workers.dev/health"
 $tokenName = 'OKAZ_CF_SCHEDULES_READ_TOKEN'
 $projectBin = Join-Path $repoRoot 'cloudflare-worker\node_modules\.bin'
 $status = 'failed'
@@ -27,6 +25,17 @@ $childTokenInherited = $false
 $failurePhase = 'initialization'
 $projectCliPathConfigured = $false
 $safeErrorExcerpt = $null
+
+function Get-VersionPreviewHealthUrl {
+    param([string]$VersionId)
+    $parsed = [guid]::Empty
+    if (-not [guid]::TryParse($VersionId, [ref]$parsed)) { throw 'invalid_version_id' }
+    $prefix = $VersionId.Substring(0, 8).ToLowerInvariant()
+    return "https://${prefix}-okaz-slot-watcher-cf.u3comp.workers.dev/health"
+}
+
+$groupHealth = Get-VersionPreviewHealthUrl $GroupVersionId
+$personalHealth = Get-VersionPreviewHealthUrl $PersonalVersionId
 
 function ConvertTo-SafeErrorExcerpt {
     param([string]$Text)
