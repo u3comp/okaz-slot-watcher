@@ -24,15 +24,36 @@ Human Checkpoint B approval.
 ## Executable local pipeline
 
 `capture-group-id.mjs` runs the project-local Wrangler binary, starts
-`wrangler tail --format json`, parses the real top-level `logs[].message[]`
-envelope, and stops the child process after the first valid event or timeout.
-It drains both stdout and stderr, closes the line reader and timers, waits for
-close after SIGTERM, and uses SIGKILL only after the grace timeout. A failed
-stop is reported as `tail_stop_failed` / `tail_stopped=false` and blocks every
-Secret operation.
-Without `--apply` it only reports a coarse capture status. With explicit
-`--apply`, it checks that `LINE_GROUP_ID` is absent by name using GitHub's JSON
-list and project-local `wrangler secret list --format json` for the currently
+`wrangler tail --format json`, and reconstructs Wrangler 4.118.0's multi-line,
+four-space-indented JSON objects directly from stdout chunks. The string-aware
+framer handles arbitrary chunk boundaries, CRLF/LF, escaped quotes and
+backslashes, braces inside strings, and consecutive objects without printing
+or persisting raw Tail data. Completed objects are then inspected through the
+real top-level `logs[].message[]` envelope.
+
+The default timeout is 600 seconds. `--timeout-seconds` accepts 60 through 900
+seconds and rejects all other values before starting Tail. Probe mode is
+read-only and never invokes GitHub or Cloudflare Secret commands:
+
+```powershell
+node .\capture-worker\capture-group-id.mjs --probe --timeout-seconds 60
+```
+
+Probe succeeds only after observing one `outcome=ok`, HTTP 200 Worker
+invocation without a capture event. The capture command used after a successful
+Probe is:
+
+```powershell
+node .\capture-worker\capture-group-id.mjs --apply --timeout-seconds 600
+```
+
+The CLI drains both stdout and stderr, closes stream listeners and timers,
+waits for close after SIGTERM, and uses SIGKILL only after the grace timeout. A
+failed stop is reported as `tail_stop_failed` / `tail_stopped=false` and blocks
+every Secret operation. Without `--apply` it only reports a coarse capture
+status. With explicit `--apply`, it checks that `LINE_GROUP_ID` is absent by
+name using GitHub's JSON list and project-local
+`wrangler secret list --format json` for the currently
 deployed Worker, then sends the captured value through stdin to `gh secret
 set` and `wrangler versions secret put`; the value is never an argument,
 output, file, environment variable, or clipboard entry. Before and after the

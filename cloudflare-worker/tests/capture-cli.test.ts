@@ -8,7 +8,7 @@ import path from "node:path";
 // The executable is intentionally JavaScript so Windows can run it directly
 // with the project-local Node/Wrangler runtime.
 // @ts-ignore no declaration file is needed for this executable test adapter.
-import { extractGroupIdFromTailEnvelope, identifyCreatedVersion, parseSecretNamesJson, runCapturePipeline, stopProcess } from "../capture-worker/capture-group-id.mjs";
+import { createTailJsonFrameParser, extractGroupIdFromTailEnvelope, formatCliResultLines, identifyCreatedVersion, inspectTailEnvelope, parseCliOptions, parseSecretNamesJson, runCapturePipeline, stopProcess } from "../capture-worker/capture-group-id.mjs";
 
 type FakeChild = EventEmitter & {
   stdout: Readable;
@@ -22,19 +22,27 @@ type FakeChild = EventEmitter & {
 
 function fakeChild({
   lines = [],
+  chunks,
   stdoutOpen = false,
   stderrOpen = false,
   initialExitCode = null,
   killMode = "term-closes",
 }: {
   lines?: string[];
+  chunks?: string[];
   stdoutOpen?: boolean;
   stderrOpen?: boolean;
   initialExitCode?: number | null;
   killMode?: "term-closes" | "force-closes" | "never-closes";
 } = {}): FakeChild {
   const child = new EventEmitter() as FakeChild;
-  child.stdout = stdoutOpen ? new Readable({ read() {} }) : Readable.from(lines.map((line) => `${line}\n`));
+  const outputChunks = chunks ?? lines.map((line) => `${line}\n`);
+  child.stdout = stdoutOpen ? new Readable({ read() {} }) : Readable.from(outputChunks);
+  if (stdoutOpen && outputChunks.length > 0) {
+    queueMicrotask(() => {
+      for (const chunk of outputChunks) child.stdout.push(chunk);
+    });
+  }
   child.stderr = stderrOpen ? new PassThrough() : Readable.from([]);
   child.stdin = { end: () => undefined };
   child.exitCode = initialExitCode;
@@ -79,6 +87,8 @@ function adapterFor(tail: FakeChild, outcomes: Record<string, Outcome | Outcome[
 }
 
 const envelope = () => readFileSync(new URL("./fixtures/tail-envelope.jsonl", import.meta.url), "utf8").trim();
+const prettyEnvelope = () => readFileSync(new URL("./fixtures/tail-envelope-wrangler-4.118.0-pretty.json", import.meta.url), "utf8");
+const probeEnvelope = () => readFileSync(new URL("./fixtures/tail-envelope-wrangler-4.118.0-probe.json", import.meta.url), "utf8");
 const operationId = "22222222-2222-4222-8222-222222222222";
 const tag = `line-group-id-secret-${operationId}`;
 const message = `Add LINE_GROUP_ID secret version ${operationId}; do not deploy`;
@@ -100,6 +110,59 @@ function successfulApplyOutcomes(): Record<string, Outcome | Outcome[]> {
     [`wrangler:versions secret put LINE_GROUP_ID --tag ${tag} --message ${message} --config wrangler.production.toml`]: { code: 0, stdout: "human-readable output without a version identifier" },
   };
 }
+
+function parseFramedObjects(chunks: string[]) {
+  const objects: unknown[] = [];
+  const parser = createTailJsonFrameParser((value: unknown) => objects.push(value));
+  for (const chunk of chunks) parser.push(chunk);
+  return { objects, parserState: parser.finish() };
+}
+
+describe("Wrangler 4.118.0 multiline Tail framing", () => {
+  it("parses the four-space pretty JSON fixture and ignores braces and escaped quotes inside strings", () => {
+    const { objects, parserState } = parseFramedObjects([prettyEnvelope()]);
+    expect(objects).toHaveLength(1);
+    expect(parserState.capture_event_unparseable).toBe(false);
+    expect(inspectTailEnvelope(objects[0])).toMatchObject({
+      valid_tail_envelope_seen: true,
+      worker_invocation_seen: true,
+      capture_event_seen: true,
+      group_id: "group-envelope-fixture",
+      outcome: "ok",
+      http_status: 200,
+    });
+  });
+
+  it("parses every two-chunk split boundary and a one-character-at-a-time stream", () => {
+    const fixture = prettyEnvelope();
+    for (let split = 0; split <= fixture.length; split += 1) {
+      const { objects } = parseFramedObjects([fixture.slice(0, split), fixture.slice(split)]);
+      expect(objects).toHaveLength(1);
+      expect(inspectTailEnvelope(objects[0]).group_id).toBe("group-envelope-fixture");
+    }
+    const characterChunks = [...fixture];
+    const { objects } = parseFramedObjects(characterChunks);
+    expect(objects).toHaveLength(1);
+    expect(inspectTailEnvelope(objects[0]).group_id).toBe("group-envelope-fixture");
+  });
+
+  it("parses consecutive envelopes, CRLF, and safe non-JSON Wrangler warnings", () => {
+    const probe = probeEnvelope().replaceAll("\n", "\r\n");
+    const capture = prettyEnvelope().replaceAll("\n", "\r\n");
+    const { objects } = parseFramedObjects([`safe warning without data\r\n${probe}${capture}`]);
+    expect(objects).toHaveLength(2);
+    expect(inspectTailEnvelope(objects[0])).toMatchObject({ worker_invocation_seen: true, capture_event_seen: false, http_status: 200 });
+    expect(inspectTailEnvelope(objects[1])).toMatchObject({ capture_event_seen: true, group_id: "group-envelope-fixture" });
+  });
+
+  it("fails closed for invalid or truncated JSON without returning raw data", () => {
+    const invalid = parseFramedObjects(["warning {ignored}\n{not-json}\n"]);
+    expect(invalid.objects).toHaveLength(0);
+    const truncated = parseFramedObjects(['{\n  "outcome": "ok",\n  "logs": [{"message":["{\\"event\\":\\"line_group_id_capture\\""]}]']);
+    expect(truncated.objects).toHaveLength(0);
+    expect(truncated.parserState.capture_event_unparseable).toBe(true);
+  });
+});
 
 describe("executable Capture pipeline", () => {
   it("uses Wrangler 4.118.0 commands that expose the required read-only and version metadata flags", () => {
@@ -124,6 +187,93 @@ describe("executable Capture pipeline", () => {
     expect(extractGroupIdFromTailEnvelope(envelope())).toBe("group-envelope-fixture");
   });
 
+  it("parses the 600-second default and enforces the 60-to-900-second CLI range", () => {
+    expect(parseCliOptions([])).toEqual({ apply: false, probe: false, timeoutSeconds: 600 });
+    expect(parseCliOptions(["--apply", "--timeout-seconds", "600"])).toEqual({ apply: true, probe: false, timeoutSeconds: 600 });
+    expect(parseCliOptions(["--probe", "--timeout-seconds", "60"])).toEqual({ apply: false, probe: true, timeoutSeconds: 60 });
+    expect(parseCliOptions(["--timeout-seconds", "900"])).toEqual({ apply: false, probe: false, timeoutSeconds: 900 });
+    for (const args of [
+      ["--timeout-seconds", "59"],
+      ["--timeout-seconds", "901"],
+      ["--timeout-seconds", "1.5"],
+      ["--timeout-seconds"],
+      ["--apply", "--probe"],
+      ["--unknown"],
+    ]) {
+      expect(() => parseCliOptions(args)).toThrow("invalid_arguments");
+    }
+
+    const executable = path.join(process.cwd(), "capture-worker", "capture-group-id.mjs");
+    const invalidRun = spawnSync(process.execPath, [executable, "--timeout-seconds", "59"], { cwd: process.cwd(), encoding: "utf8" });
+    expect(invalidRun.status).toBe(2);
+    expect(invalidRun.stdout.trim().split(/\r?\n/)).toEqual(["capture_status=invalid_arguments", "tail_stopped=false"]);
+    expect(invalidRun.stderr).toBe("");
+  });
+
+  it("formats only allowlisted status fields and never leaks raw or secret-like values", () => {
+    const sensitive = {
+      status: "worker_invocation_seen",
+      tail_stopped: true,
+      worker_invocation_seen: true,
+      valid_tail_envelope_seen: true,
+      capture_event_seen: false,
+      http_status: 200,
+      group_id: "group-sensitive-fixture",
+      user_id: "user-sensitive-fixture",
+      token: "token-sensitive-fixture",
+      raw: "raw-sensitive-fixture",
+    };
+    const captureOutput = formatCliResultLines(sensitive).join("\n");
+    const probeOutput = formatCliResultLines(sensitive, { probe: true }).join("\n");
+    for (const output of [captureOutput, probeOutput]) {
+      expect(output).not.toContain("group-sensitive-fixture");
+      expect(output).not.toContain("user-sensitive-fixture");
+      expect(output).not.toContain("token-sensitive-fixture");
+      expect(output).not.toContain("raw-sensitive-fixture");
+    }
+  });
+
+  it("Probe mode recognizes one healthy invocation and performs zero Secret commands", async () => {
+    const adapter = adapterFor(fakeChild({ chunks: [...probeEnvelope()] }));
+    const result = await runCapturePipeline({
+      workerRoot: process.cwd(),
+      configPath: "wrangler.production.toml",
+      adapter,
+      probe: true,
+      timeoutMs: 1000,
+    });
+    expect(result).toEqual({
+      status: "worker_invocation_seen",
+      tail_stopped: true,
+      worker_invocation_seen: true,
+      valid_tail_envelope_seen: true,
+      capture_event_seen: false,
+      http_status: 200,
+    });
+    expect(adapter.calls).toEqual([]);
+  });
+
+  it("Probe mode fails closed if a capture event appears and still performs zero Secret commands", async () => {
+    const adapter = adapterFor(fakeChild({ chunks: [prettyEnvelope()] }));
+    const result = await runCapturePipeline({
+      workerRoot: process.cwd(),
+      configPath: "wrangler.production.toml",
+      adapter,
+      probe: true,
+      apply: true,
+      timeoutMs: 1000,
+    });
+    expect(result).toEqual({
+      status: "probe_capture_event_seen",
+      tail_stopped: true,
+      worker_invocation_seen: true,
+      valid_tail_envelope_seen: true,
+      capture_event_seen: true,
+      http_status: 200,
+    });
+    expect(adapter.calls).toEqual([]);
+  });
+
   it("parses only names from the actual secret list JSON shape", () => {
     expect(parseSecretNamesJson('[{"name":"LINE_USER_ID","type":"secret_text"}]')).toEqual(["LINE_USER_ID"]);
     expect(() => parseSecretNamesJson("not-json")).toThrow("secret_list_json_invalid");
@@ -140,7 +290,15 @@ describe("executable Capture pipeline", () => {
     const child = fakeChild({ lines: [envelope()] });
     const adapter = adapterFor(child);
     const result = await runCapturePipeline({ workerRoot: process.cwd(), configPath: "wrangler.production.toml", adapter, timeoutMs: 1000 });
-    expect(result).toEqual({ status: "captured", tail_stopped: true, applied: false });
+    expect(result).toEqual({
+      status: "captured",
+      tail_stopped: true,
+      worker_invocation_seen: true,
+      valid_tail_envelope_seen: true,
+      capture_event_seen: true,
+      applied: false,
+    });
+    expect(JSON.stringify(result)).not.toContain("group-envelope-fixture");
     expect(adapter.calls).toEqual([]);
     expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
     expect(child.listenerCount("close")).toBe(0);
@@ -159,7 +317,14 @@ describe("executable Capture pipeline", () => {
       timeoutMs: 1000,
       operationId,
     });
-    expect(result).toEqual({ status: "secrets_set", tail_stopped: true, cloudflare_version_id: newVersion });
+    expect(result).toEqual({
+      status: "secrets_set",
+      tail_stopped: true,
+      worker_invocation_seen: true,
+      valid_tail_envelope_seen: true,
+      capture_event_seen: true,
+      cloudflare_version_id: newVersion,
+    });
     expect(adapter.calls.some((call) => call.command === "wrangler" && call.args.join(" ") === "secret list --format json --config wrangler.production.toml")).toBe(true);
     expect(adapter.calls.filter((call) => call.command === "wrangler" && call.args.slice(0, 2).join(" ") === "versions list")).toHaveLength(2);
     const secretCalls = adapter.calls.filter((call) => call.args.includes("LINE_GROUP_ID"));
@@ -188,7 +353,14 @@ describe("executable Capture pipeline", () => {
     outcomes["gh:secret delete LINE_GROUP_ID --repo u3comp/okaz-slot-watcher"] = { code: 0 };
     const adapter = adapterFor(fakeChild({ lines: [envelope()] }), outcomes);
     const result = await runCapturePipeline({ workerRoot: process.cwd(), configPath: "wrangler.production.toml", adapter, apply: true, timeoutMs: 1000, operationId });
-    expect(result).toEqual({ status: "partial_cloudflare_secret_version_unverified", tail_stopped: true, github_secret_cleanup_confirmed: true });
+    expect(result).toEqual({
+      status: "partial_cloudflare_secret_version_unverified",
+      tail_stopped: true,
+      worker_invocation_seen: true,
+      valid_tail_envelope_seen: true,
+      capture_event_seen: true,
+      github_secret_cleanup_confirmed: true,
+    });
     expect(adapter.calls.filter((call) => call.command === "gh" && call.args.includes("delete"))).toHaveLength(1);
     expect(adapter.calls.filter((call) => call.command === "wrangler" && call.args.includes("delete"))).toHaveLength(0);
   });
@@ -234,7 +406,13 @@ describe("tail child lifecycle", () => {
     const child = fakeChild({ lines: ["not-json"], stderrOpen: true });
     const adapter = adapterFor(child);
     const result = await runCapturePipeline({ workerRoot: process.cwd(), configPath: "wrangler.production.toml", adapter, timeoutMs: 1000 });
-    expect(result).toEqual({ status: "tail_disconnected", tail_stopped: true });
+    expect(result).toEqual({
+      status: "tail_disconnected",
+      tail_stopped: true,
+      worker_invocation_seen: false,
+      valid_tail_envelope_seen: false,
+      capture_event_seen: false,
+    });
     expect(child.stderr.listenerCount("data")).toBe(0);
     expect(child.stderr.destroyed).toBe(true);
   });
@@ -249,7 +427,50 @@ describe("tail child lifecycle", () => {
       stopGracefulTimeoutMs: 5,
       stopForceTimeoutMs: 5,
     });
-    expect(result).toEqual({ status: "timeout", tail_stopped: true });
+    expect(result).toEqual({
+      status: "timeout_no_worker_invocation",
+      tail_stopped: true,
+      worker_invocation_seen: false,
+      valid_tail_envelope_seen: false,
+      capture_event_seen: false,
+    });
+  });
+
+  it("distinguishes an invocation without capture from an unparseable capture event", async () => {
+    const withoutCapture = await runCapturePipeline({
+      workerRoot: process.cwd(),
+      configPath: "wrangler.production.toml",
+      adapter: adapterFor(fakeChild({ chunks: [probeEnvelope()], stdoutOpen: true })),
+      timeoutMs: 5,
+      stopGracefulTimeoutMs: 5,
+      stopForceTimeoutMs: 5,
+    });
+    expect(withoutCapture).toEqual({
+      status: "timeout_worker_invocation_without_capture",
+      tail_stopped: true,
+      worker_invocation_seen: true,
+      valid_tail_envelope_seen: true,
+      capture_event_seen: false,
+    });
+
+    const truncatedCapture = [
+      '{\n    "outcome": "ok",\n    "logs": [{"message": ["{\\"event\\":\\"line_group_id_capture\\""]}],\n',
+    ];
+    const unparseable = await runCapturePipeline({
+      workerRoot: process.cwd(),
+      configPath: "wrangler.production.toml",
+      adapter: adapterFor(fakeChild({ chunks: truncatedCapture, stdoutOpen: true })),
+      timeoutMs: 5,
+      stopGracefulTimeoutMs: 5,
+      stopForceTimeoutMs: 5,
+    });
+    expect(unparseable).toEqual({
+      status: "timeout_capture_event_unparseable",
+      tail_stopped: true,
+      worker_invocation_seen: false,
+      valid_tail_envelope_seen: false,
+      capture_event_seen: false,
+    });
   });
 
   it("performs zero secret writes when the tail cannot be stopped", async () => {
@@ -265,7 +486,13 @@ describe("tail child lifecycle", () => {
       stopForceTimeoutMs: 5,
       operationId,
     });
-    expect(result).toEqual({ status: "tail_stop_failed", tail_stopped: false });
+    expect(result).toEqual({
+      status: "tail_stop_failed",
+      tail_stopped: false,
+      worker_invocation_seen: true,
+      valid_tail_envelope_seen: true,
+      capture_event_seen: true,
+    });
     expect(adapter.calls).toHaveLength(0);
   });
 });

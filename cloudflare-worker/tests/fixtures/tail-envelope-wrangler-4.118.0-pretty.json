@@ -1,0 +1,32 @@
+{
+    "outcome": "ok",
+    "scriptName": "line-group-id-endpoint",
+    "exceptions": [],
+    "logs": [
+        {
+            "level": "log",
+            "message": [
+                "noise with { braces } and an escaped quote: \"safe fixture\"",
+                "{\"event\":\"other\",\"value\":\"discard\"}"
+            ]
+        },
+        {
+            "level": "log",
+            "message": [
+                "{\"event\":\"line_group_id_capture\",\"group_id\":\"group-envelope-fixture\"}"
+            ]
+        }
+    ],
+    "eventTimestamp": 1785891600000,
+    "event": {
+        "request": {
+            "url": "https://capture.invalid/",
+            "method": "POST",
+            "headers": {},
+            "cf": {}
+        },
+        "response": {
+            "status": 200
+        }
+    }
+}

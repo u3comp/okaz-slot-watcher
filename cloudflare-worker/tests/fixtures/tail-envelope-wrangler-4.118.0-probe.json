@@ -1,0 +1,18 @@
+{
+    "outcome": "ok",
+    "scriptName": "line-group-id-endpoint",
+    "exceptions": [],
+    "logs": [],
+    "eventTimestamp": 1785891600000,
+    "event": {
+        "request": {
+            "url": "https://capture.invalid/",
+            "method": "POST",
+            "headers": {},
+            "cf": {}
+        },
+        "response": {
+            "status": 200
+        }
+    }
+}
