@@ -1,6 +1,6 @@
 # Group Production Cutover
 
-Status: `CLOUDFLARE_GROUP_ACTIVE_GITHUB_MAIN_INTEGRATION_PENDING`
+Status: `GITHUB_MAIN_GROUP_ROUTE_VALIDATED_PENDING_TOKEN_CLEANUP`
 
 実施日: `2026-08-05 JST`
 
@@ -47,12 +47,12 @@ Status: `CLOUDFLARE_GROUP_ACTIVE_GITHUB_MAIN_INTEGRATION_PENDING`
 
 - Repository Variable `LINE_DESTINATION_MODE`: `group`
 - Feature branch: `feat/line-destination-routing`
-- remote main: `6cf4d439c17c1899837452b43c3f903169df9dbf`（変更なし）
-- remote mainには`LINE_DESTINATION_MODE`／`LINE_GROUP_ID`対応がまだ存在しない。
-- したがってCloudflare Productionはgroup経路で稼働中だが、GitHub Actionsのdefault-branch scheduleは、main統合が別途承認・完了するまでgroup変数を利用しない。
+- remote main: `350d500e5e20903592829d2876bce52109af8832`（featureとfast-forward統合済み）
+- remote mainへ`LINE_DESTINATION_MODE`／`LINE_GROUP_ID`対応を統合済み。
+- GitHub Actionsのdefault-branch group routeはmain line_testとnormal検証で確認済み。
 
 ## Safety result
 
 途中のhealth伝播待機不足によるApply失敗時は、Personal Version 100%とGitHub Variable未設定へ自動Rollbackし、D1正常を確認した。伝播待機を追加後の最終Applyは成功した。Secret、LINE ID、Webhook URL、Authorization、Cookieは、結果JSON、Git、D1、文書、ログへ保存していない。
 
-次の作業は、別承認によるfeature branchのmain統合と、main scheduleがgroup routeを利用することの検証である。
+最終default-branch証跡は`docs/status/2026-08-05_line-group-migration-complete.md`に記録した。scheduleは遅延したため、承認済みnormal手動実行で代替確認した。

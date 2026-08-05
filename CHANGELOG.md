@@ -53,5 +53,5 @@ Group切替では承認済みPersonal VersionをRollback先として検証済み
 - Cloudflare ProductionはGroup Candidate `e65c222d-49ba-4dff-95f4-a3059d26db32`を100%で稼働し、health=group、Cron毎分、D1正常を確認済み
 - GitHub Repository Variable `LINE_DESTINATION_MODE=group`は設定済み
 - personal／group実配送E2Eはfeature branchで各1件、人間着信確認済み
-- remote mainは`6cf4d439c17c1899837452b43c3f903169df9dbf`のままでdestination routing未統合。GitHub Actions default-branch scheduleのgroup対応はmain統合後の別Gate
+- remote mainは`350d500e5e20903592829d2876bce52109af8832`へfast-forward統合済み。main line_test／normal検証でgroup routeを確認
 - 旧Candidate `fef3f4c1-d4cc-476e-ae98-51daff127df0`はPreview検証用の履歴であり、現在のProduction Active Versionではない
