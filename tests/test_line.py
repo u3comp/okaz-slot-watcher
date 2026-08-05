@@ -143,9 +143,9 @@ def test_line_test_sends_exactly_one_message_without_state_or_page(monkeypatch) 
     )
     assert cli.run_line_test() == 0
     assert len(calls) == 1
-    assert calls[0][2].startswith(
-        "【テスト通知】Personal Ops\nLINE通知経路は正常です。\n送信時刻: "
-    )
+    assert calls[0][2].startswith("【テスト通知】Personal Ops\nProduction切替前テスト\n")
+    assert "configured経路確認" in calls[0][2]
+    assert "Test ID: LINE-CONFIGURED-" in calls[0][2]
     UUID(calls[0][3])
 
 

@@ -76,15 +76,22 @@ def run_line_test() -> int:
         )
     except LineDestinationError as exc:
         raise LineError(str(exc)) from None
+    route_label = os.environ.get("LINE_TEST_DESTINATION", "configured")
+    delivery_id = str(uuid4())
+    test_id = f"LINE-{route_label.upper()}-{delivery_id}"
     send_line(
         token,
         destination.destination_id,
         "【テスト通知】Personal Ops\n"
-        "LINE通知経路は正常です。\n"
+        "Production切替前テスト\n"
+        f"{route_label}経路確認\n"
+        "実際の空き枠通知ではありません。\n"
+        "申込み・応答は不要です。\n"
+        f"Test ID: {test_id}\n"
         f"送信時刻: {_timestamp()} (Asia/Tokyo)",
-        str(uuid4()),
+        delivery_id,
     )
-    print("LINE test notification delivered.")
+    print(f"LINE test notification delivered. Test ID: {test_id}")
     return 0
 
 
