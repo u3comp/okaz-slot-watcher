@@ -12,6 +12,8 @@
 - Production正本 `cloudflare-worker/wrangler.production.toml`
 - GitHub／Cloudflare切替のread-only preflight、post-check、rollback契約
 - GitHubユーザー一致、D1 JSON assert、実効Cron取得不能時のApply fail-closed、Health必須化
+- Group／Personal Remote WhatIf、Version Preview prefix検証、Deploy後health伝播待機、Cron／D1再確認、Variable未設定への正確なRollback
+- 承認済みGroup CandidateをCloudflare Productionへ100%昇格し、Production healthとD1 scheduled観測を確認
 - LINE検証POSTのHTTP 200契約、Tail子プロセス停止確認、実コマンドに基づくSecret名一覧とVersion識別
 - Health JSONの3キーexact allowlistと設定boolean検証
 - ルーティング、fail-closed、Capture／Dormantの自動テスト
@@ -30,7 +32,7 @@
 - Capture Workerはraw bodyの署名を検証し、専用tailイベント以外へgroupIdを出さない。OrchestratorはIDを表示・永続化せず標準入力コールバックへ渡す
 - Worker isolateのduplicate suppressionはbest effortであり、Orchestratorの1件受領が正式停止条件
 - Dormant sinkはPOST bodyを読まず、外部通信・永続ログ・Secret・Cron・Bindingを持たない
-- Production Worker、Productionモード、Cron、D1は変更していない。Capture中だけWebhook配送を有効化し、取得後は無効化した
+- Capture中だけWebhook配送を有効化し、取得後は無効化した。Group切替ではCron、D1、Secret、Webhookを変更していない
 - groupId実値は表示・永続化せず、GitHub SecretとCloudflare未Deploy Secret Versionへstdin経由で登録した
 
 ### Rollback
@@ -41,15 +43,15 @@
 powershell -File scripts/set-line-destination.ps1 -Mode personal -Apply -CloudflareVersionId <approved-version-id>
 ```
 
-このPending記録では実行していない。`-WhatIf` は外部状態を変更しない。
+Group切替では承認済みPersonal VersionをRollback先として検証済み。`-WhatIf` は外部状態を変更しない。
 
-### Pending
+### Current production and pending
 
 - Captureは`secrets_set`、`tail_stopped=true`で完了し、Webhook配送は無効化済み
-- GitHub `LINE_GROUP_ID`とCloudflare未Deploy Secret Versionは作成済み。Production trafficは0%で、Active Version／Deploymentは不変
+- `LINE_GROUP_ID`はGitHub／Cloudflare ProductionのSecret名として存在し、値は取得していない
 - Capture Workerは同一Webhook URLのDormant Workerへ置換済み。Channel Secret、bindings、永続ログは残していない
-- Productionの`LINE_DESTINATION_MODE`変更、候補Version Deploy、personal／group実配送E2Eは未実施
-- Production候補Versionの非Deploy検証とLINE route testはHuman承認下でPending
-- Candidate `fef3f4c1-d4cc-476e-ae98-51daff127df0`をUploadし、Preview `/health`とD1不変を確認したが、Production trafficは0%のまま
-- remote mainにdestination overrideがないため、feature branch未Push時点ではpersonal／group実送信を実施せず`PRODUCTION_CANDIDATE_VALIDATION_BLOCKED`とした
-- 次の承認範囲はfeature branchだけのpushと、branch指定`line_test`をpersonal、group各1回実施すること
+- Cloudflare ProductionはGroup Candidate `e65c222d-49ba-4dff-95f4-a3059d26db32`を100%で稼働し、health=group、Cron毎分、D1正常を確認済み
+- GitHub Repository Variable `LINE_DESTINATION_MODE=group`は設定済み
+- personal／group実配送E2Eはfeature branchで各1件、人間着信確認済み
+- remote mainは`6cf4d439c17c1899837452b43c3f903169df9dbf`のままでdestination routing未統合。GitHub Actions default-branch scheduleのgroup対応はmain統合後の別Gate
+- 旧Candidate `fef3f4c1-d4cc-476e-ae98-51daff127df0`はPreview検証用の履歴であり、現在のProduction Active Versionではない

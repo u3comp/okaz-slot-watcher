@@ -1,11 +1,11 @@
-# LINE通知先切替Runbook（Production candidate pending）
+# LINE通知先切替Runbook（Cloudflare group active）
 
 最終更新: 2026-08-05 JST
 
 ## 構成
 
 - `LINE_USER_ID`: 既存の個人宛先Secret。削除・改名・上書きしない。
-- `LINE_GROUP_ID`: グループ宛先Secret。GitHubへ登録済み。Cloudflareでは未Deploy Secret Versionにのみ存在し、Production trafficは0%。
+- `LINE_GROUP_ID`: グループ宛先Secret。GitHub／Cloudflare Productionへ登録済み。値は取得しない。
 - `LINE_DESTINATION_MODE`: `personal` または `group`。未設定は `personal`。
 - GitHub Actionsの通常監視は `LINE_TEST_DESTINATION` を無視し、Repository Variableだけを使う。
 - `line_test`だけが `configured` / `personal` / `group` の手動overrideを受け付ける。
@@ -33,13 +33,15 @@ powershell -File scripts/set-line-destination.ps1 -Mode group -WhatIf -Cloudflar
 
 1. personal／groupの両方で手動 `line_test` を実施し、人間が着信確認する。
 2. Cloudflare側のレビュー済みVersionを用意する。Version Upload／Deployは別承認とする。
-3. 次を実行し、Cloudflare Versionを先に昇格してからGitHub Variableを更新する。正本configを明示し、対象Versionのreview recordを必須とする。
+3. 次を実行し、Cloudflare Versionを先に昇格し、Production healthの伝播とCron／D1を確認してからGitHub Variableを更新する。正本configを明示し、対象Versionのreview recordを必須とする。
 
 ```powershell
-powershell -File scripts/set-line-destination.ps1 -Mode group -Apply -CloudflareVersionId <approved-version-id> -ApprovalRecord <review-record> -HealthUrl <approved-health-url> -ExpectedGroupConfigured true
+powershell -File scripts/set-line-destination.ps1 -Mode group -Apply -CloudflareVersionId <approved-version-id> -ApprovalRecord <review-record> -CurrentHealthUrl <production-health-url> -TargetHealthUrl <version-preview-health-url> -ExpectedGroupConfigured true
 ```
 
-4. 片側失敗時は前Versionと前Variableへrollbackし、事後preflightが通らなければ`INCONSISTENT_DESTINATION_STATE`として追加操作なしで停止する。
+4. 片側失敗時は前Versionと前Variable状態（未設定を含む）へrollbackし、事後preflightが通らなければ`INCONSISTENT_DESTINATION_STATE`として追加操作なしで停止する。
+
+Cloudflare Versioned Previewは完全なVersion UUIDではなく、先頭8文字のVersion Prefixをhostへ使用する。
 
 ## ロールバック
 

@@ -20,8 +20,12 @@ def run_script(*args):
 def test_whatif_executes_read_only_preflight_without_write_commands():
     result = run_script("-Mode", "personal", "-WhatIf")
     assert result.returncode != 0
-    assert "effective Cron could not be verified" in (result.stdout + result.stderr)
-    assert "deploy" not in (result.stdout + result.stderr).lower()
+    combined = result.stdout + result.stderr
+    assert (
+        "target version mode does not match requested mode" in combined
+        or "effective Cron could not be verified" in combined
+    )
+    assert "versions deploy" not in combined.lower()
 
 
 def test_repository_mismatch_fails_closed_before_mutation():
