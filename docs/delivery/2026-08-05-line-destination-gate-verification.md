@@ -1,26 +1,30 @@
 # Completion Verification — LINE Destination Gate Repair
 
 作業日: 2026-08-05 JST（差戻し修正）
-状態: `HUMAN_CHECKPOINT_B_REVIEW_PENDING`
+状態: `HUMAN_CHECKPOINT_B_CAPTURE_READY_REVIEW_PENDING`
 修正基点: `ca8e2eee9376cd1cf884ebf526b03607c8f7f608`
-直近検証HEAD: 最終修正コミットで更新
+Implementation Commit: `a5380fc664e6c55570c6e700ebfe649d86c4c252`
 
 ## Repair evidence
 
-- Capture default export emits one dedicated machine-readable tail event for the first valid signed group event.
+- Capture default export returns HTTP 200 for every signed valid JSON request, including LINE verification `events: []`; no-op requests log nothing and the first valid group event emits one dedicated machine-readable tail event.
 - Local Orchestrator consumes tail output in memory, transfers through callbacks, stops on first success, and never prints or persists the ID.
+- Capture CLI drains stdout/stderr, releases timer/readline/listeners, verifies SIGTERM/SIGKILL close state, and performs zero Secret writes when `tail_stopped=false`.
+- Deployed Secret names are read with project-local `wrangler secret list --format json`; only `name` is parsed. Cloudflare Secret Version identity is proven from pre/post `versions list --json` and a unique non-secret tag/message.
 - Capture isolate state is documented as best-effort; Orchestrator receipt is authoritative.
 - Canonical production config is tracked at `cloudflare-worker/wrangler.production.toml` with the verified Worker, D1, flags, target URL, and `* * * * *` Cron; secret values are absent.
-- Switch script performs repository/account/active-version/mode/D1/lease/config preflight, target-version checks, post-checks, and rollback with `INCONSISTENT_DESTINATION_STATE` fail-stop.
+- Switch script performs repository/account/active-version/mode/D1/lease/config preflight, exact 3-key Health schema and boolean checks, target-version checks, post-checks, and rollback with `INCONSISTENT_DESTINATION_STATE` fail-stop.
 
 ## Validation
 
 - Worker typecheck: pass
-- Worker tests: 6 files / 109 tests pass
+- Worker tests: 6 files / 123 tests pass
 - Python tests: 78 passed in project venv (including switch-script and config tests)
-- Executable Capture CLI: real envelope parser, process adapter, timeout/termination, stdin-only transfer, partial rollback tests pass
+- LINE webhook verification request: signed `events: []` returns 200, response contains no destination/ID, logs 0
+- Executable Capture CLI: real envelope parser, real Wrangler 4.118.0 help capability, process lifecycle, stdin-only transfer, Secret JSON parser, unique Version identification, and partial-state tests pass
 - PowerShell WhatIf personal: read-only preflight pass; no write command
-- PowerShell本体 adapter／failure-injection: pass
+- PowerShell個別関数 adapter／failure-injection: pass（Apply全体E2Eではない）
+- Health exact-schema: group configured pass、missing/mode/unknown-key/ID-key/non-200 fail-closed
 - Mismatch and rollback failure-injection tests: pass
 - Workflow YAML, PowerShell syntax, diff check: pass
 - Main/Capture/Dormant Wrangler dry-run: local-only pass
