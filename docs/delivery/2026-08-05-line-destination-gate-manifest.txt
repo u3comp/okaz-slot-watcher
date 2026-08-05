@@ -1,14 +1,23 @@
 Archive: okaz-slot-watcher-line-destination-gate-20260805.zip
-Scope: local implementation and Human Checkpoint B repair only
+Scope: local implementation, Capture parser repair, and approved Capture Phase evidence
 Work date: 2026-08-05 JST
 Feature branch: feat/line-destination-routing
 Repair Base: ca8e2eee9376cd1cf884ebf526b03607c8f7f608
 Implementation Commit: a5380fc664e6c55570c6e700ebfe649d86c4c252
 Validation Commit: 1f461fa1b4cfe6c5098d8f3dc57176c5f09cc6e3
-Packaged Commit: 1f461fa1b4cfe6c5098d8f3dc57176c5f09cc6e3
-Packaged Tree: 592ae14f25bdf92cb1faca5f26988233cddd40cd
-Evidence-only HEAD: STAMP_AFTER_EVIDENCE_COMMIT
+Packaged Commit: a49846de214b0c9a8c309f9bc64d589d90c56f6a
+Packaged Tree: 8ffeace15223ec44ddc94a1dbf028cc956bb4433
+Evidence-only HEAD: a49846de214b0c9a8c309f9bc64d589d90c56f6a
+Capture Parser Commit: 3769269e9b5dd37c1dfc16bc379fc799de7ad78b
+Capture Evidence Commit: adcd6862d522d3ac4a8c93ad29fa34396403e44a
+Capture Result: secrets_set; tail_stopped=true; groupId value logged=false
+Cloudflare Secret Version: fc763ea1-1c74-41b6-92d6-b42570566b3c (undeployed; traffic 0%)
+Dormant Version / Deployment: de73b291-257c-470f-8b0a-690bda425315 / 2fb48bc8-8cbc-467f-9446-f086d62f49d5
+Production Version / Deployment: f655cd8e-e0c6-4768-b403-45b50bbd3b02 / 8406f8b7-f3b3-45d6-a072-c177713500a6 (unchanged; 100%)
 ZIP SHA-256: supplied by the external final attestation because an archive cannot contain its own digest
+Packaged Commit match: 52 source/review entries match the Git tree byte-for-byte
+Evidence overrides: manifest, verification, scan, and checksum files are final working-tree attestations over the Evidence-only HEAD
+Archive note: the named ZIP is the previous Checkpoint B package; Capture execution evidence is recorded in Git and is not claimed to be inside that earlier archive.
 
 Included source and review files:
 .gitignore
@@ -47,6 +56,8 @@ cloudflare-worker/tests/destination.test.ts
 cloudflare-worker/tests/capture-dormant.test.ts
 cloudflare-worker/tests/capture-cli.test.ts
 cloudflare-worker/tests/fixtures/tail-envelope.jsonl
+cloudflare-worker/tests/fixtures/tail-envelope-wrangler-4.118.0-pretty.json
+cloudflare-worker/tests/fixtures/tail-envelope-wrangler-4.118.0-probe.json
 cloudflare-worker/capture-worker/README.md
 cloudflare-worker/capture-worker/src/index.ts
 cloudflare-worker/capture-worker/capture-group-id.mjs
