@@ -1,0 +1,1 @@
+{"outcome":"ok","logs":[{"level":"log","message":["noise","{\"event\":\"other\",\"value\":\"discard\"}"]},{"level":"log","message":["{\"event\":\"line_group_id_capture\",\"group_id\":\"group-envelope-fixture\"}","{\"event\":\"line_group_id_capture\",\"group_id\":\"group-later\"}"]}]}

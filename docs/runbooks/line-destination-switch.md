@@ -11,6 +11,7 @@
 - `line_test`だけが `configured` / `personal` / `group` の手動overrideを受け付ける。
 - Cloudflare Workerの `/health` はモードと設定有無だけを返し、ID値を返さない。
 - Productionの正本設定は `cloudflare-worker/wrangler.production.toml`。`.example`や無指定configをDeploy元にしない。
+- `-Apply`は`-HealthUrl`を必須とし、HTTP 200、mode、設定フラグ、ID非露出を確認する。Wrangler 4.118で実効Cron一覧を取得できない場合は変更せず停止する。
 
 ## Fail-closed
 
@@ -51,6 +52,8 @@ Cloudflare Versionの承認済みIDがない場合は、推測でDeployせずHum
 ## Capture／Dormant
 
 Capture WorkerはHuman Checkpoint BまでDeployしない。Webhook URL登録後は送信前に`wrangler tail`を開始し、署名検証済みgroupイベントの専用イベントをローカルOrchestratorが1件だけ受ける。groupIdは同一プロセスの標準入力へ直接渡し、表示・ファイル・環境変数・ログ・クリップボードへ保存しない。Worker isolateのSetによる重複抑止はbest effortであり、Orchestrator受領が正式停止条件。取得後は直ちにtail停止、Webhook配送停止、Dormant化へ進む。
+
+実行ファイルは `cloudflare-worker/capture-worker/capture-group-id.mjs`。通常は`npm run capture:group-id`（captureのみ）、Secret設定を伴う場合だけ人間承認後に`node capture-worker/capture-group-id.mjs --apply`を使用する。CLIはproject-local Wranglerを直接起動し、Secret値を引数・出力・ファイルへ渡さない。
 
 ## 秘密情報の取扱い
 

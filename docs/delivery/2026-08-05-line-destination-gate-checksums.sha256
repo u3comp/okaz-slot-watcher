@@ -49,4 +49,4 @@ F72AED688C53E97378DB40770A2CD6E5944065E56D293A632C00410A22A9EF8D  tests/fixtures
 F77BF98FF8FAFEF5DF028CBF9DF9021E4D8DC8559A71E9160901BC5FABB2AB49  cloudflare-worker/tests/capture-dormant.test.ts
 F7F28FFA845C39584F6BD6A5B9771D88DC207E8DAF635403B1091A23850C115C  docs/delivery/2026-08-05-line-destination-gate-manifest.txt
 F8844E5FF869C89B684179053FBCE7DA50CCDDCF71BE6C2C77D5C0A99188A584  .github/workflows/availability-watcher.yml
-SELF  docs/delivery/2026-08-05-line-destination-gate-checksums.sha256 (excluded to avoid self-reference)
+# checksum manifest itself is excluded to avoid self-reference

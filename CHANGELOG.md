@@ -8,8 +8,10 @@
 - `LINE_GROUP_ID` と `LINE_DESTINATION_MODE` の対応
 - `line_test` 専用の `configured` / `personal` / `group` override
 - Capture Workerの専用tailイベント、ローカルOrchestrator、managed dormant sink
+- 実行可能なCapture CLI（project-local Wrangler、tail envelope、stdin転送、部分rollback）
 - Production正本 `cloudflare-worker/wrangler.production.toml`
 - GitHub／Cloudflare切替のread-only preflight、post-check、rollback契約
+- GitHubユーザー一致、D1 JSON assert、実効Cron取得不能時のApply fail-closed、Health必須化
 - ルーティング、fail-closed、Capture／Dormantの自動テスト
 
 ### Changed

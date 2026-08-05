@@ -16,3 +16,15 @@ receiving one event is the authoritative stop condition. Immediately after
 capture, stop the tail, disable webhook delivery, and move to the dormant
 sink. The Worker must not be deployed or registered as a LINE webhook until
 Human Checkpoint B approval.
+
+## Executable local pipeline
+
+`capture-group-id.mjs` runs the project-local Wrangler binary, starts
+`wrangler tail --format json`, parses the real top-level `logs[].message[]`
+envelope, and stops the child process after the first valid event or timeout.
+Without `--apply` it only reports a coarse capture status. With explicit
+`--apply`, it checks that `LINE_GROUP_ID` is absent by name, then sends the
+captured value through stdin to `gh secret set` and
+`wrangler versions secret put`; the value is never an argument, output, file,
+environment variable, or clipboard entry. A partial setup is rolled back once
+without retry. No command is run automatically by tests or CI.

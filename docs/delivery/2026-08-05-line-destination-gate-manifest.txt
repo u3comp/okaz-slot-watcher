@@ -3,7 +3,10 @@ Scope: local implementation and Human Checkpoint B repair only
 Work date: 2026-08-05 JST
 Feature branch: feat/line-destination-routing
 Repair base: ca8e2eee9376cd1cf884ebf526b03607c8f7f608
-Latest packaged source HEAD before final evidence commit: c32da96cdc97aa1fc53228f1f0815f4dfc0ef712
+Packaged Git Commit: recorded after final repair commit
+Packaged Git Tree: recorded after final repair commit
+Validation executed against Commit: recorded after final repair commit
+Evidence-only final Commit: none
 
 Included source and review files:
 .gitignore
@@ -40,8 +43,11 @@ cloudflare-worker/tests/delivery.test.ts
 cloudflare-worker/tests/repeat.test.ts
 cloudflare-worker/tests/destination.test.ts
 cloudflare-worker/tests/capture-dormant.test.ts
+cloudflare-worker/tests/capture-cli.test.ts
+cloudflare-worker/tests/fixtures/tail-envelope.jsonl
 cloudflare-worker/capture-worker/README.md
 cloudflare-worker/capture-worker/src/index.ts
+cloudflare-worker/capture-worker/capture-group-id.mjs
 cloudflare-worker/capture-worker/orchestrator.ts
 cloudflare-worker/capture-worker/wrangler.toml
 cloudflare-worker/capture-worker/wrangler.toml.example
@@ -50,6 +56,7 @@ cloudflare-worker/dormant-worker/src/index.ts
 cloudflare-worker/dormant-worker/wrangler.toml
 cloudflare-worker/dormant-worker/wrangler.toml.example
 scripts/set-line-destination.ps1
+scripts/set-line-destination.tests.ps1
 docs/runbooks/line-destination-switch.md
 docs/status/2026-08-05_production-worker-baseline.md
 docs/status/2026-08-05_line-group-destination-migration.md

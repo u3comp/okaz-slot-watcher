@@ -22,15 +22,17 @@
 - GitHub `line_test`専用destination override
 - Cloudflare `/health` の非機密状態応答
 - Capture Workerの専用tailイベントとローカルOrchestrator（IDを表示・永続化しない）
+- 実行可能な`capture-group-id.mjs`（Wrangler tail envelope、子プロセス停止、stdin Secret転送、部分rollback）
 - `scripts/set-line-destination.ps1` の読み取りpreflight、target確認、post-check、rollback
+- GitHub user完全一致、D1 JSON assert、実効Cron取得不能時Apply fail-closed、Apply時Health必須
 - Production正本 `cloudflare-worker/wrangler.production.toml`
 - CHANGELOGとrunbook
 - ローカル検証結果: `docs/status/2026-08-05_line-group-destination-validation.md`
 
 ## Validation summary
 
-- Worker: typecheck passed; 5 files / 104 tests passed
-- Python: 既存＋追加テストを再実行
+- Worker: typecheck passed; 6 files / 109 tests passed
+- Python: 78 tests passed
 - Wrangler main／Capture／Dormant dry-run passed
 - PowerShell switch-script syntax、personal WhatIf read-only preflight、failure-injection passed
 - fixture分類付きsecret scan、LINE ID、absolute-path scanを実施

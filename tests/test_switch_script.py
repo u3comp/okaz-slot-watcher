@@ -22,6 +22,9 @@ def test_whatif_executes_read_only_preflight_without_write_commands():
     assert result.returncode == 0, result.stdout + result.stderr
     assert "whatif=read_only" in result.stdout
     assert "secrets_read=false" in result.stdout
+    assert "github_user_verified=True" in result.stdout
+    assert "d1_state_valid=True" in result.stdout
+    assert "effective_cron_probe=False" in result.stdout
     assert "deploy" not in result.stdout.lower().split("whatif=")[0]
 
 
@@ -50,8 +53,20 @@ def test_script_contains_transactional_rollback_contract():
         "Rollback destination switch",
         "LINE_DESTINATION_MODE",
         "d1', 'execute",
+        "HealthUrl is required for -Apply",
+        "GitHub user mismatch",
+        "effective Cron mismatch",
+        "ReadOnlyAdapter",
+        "WriteAdapter",
     ):
         assert marker in text
+
+
+def test_power_shell_failure_injection_harness_passes():
+    harness = ROOT / "scripts" / "set-line-destination.tests.ps1"
+    result = subprocess.run(["powershell", "-NoProfile", "-File", str(harness)], cwd=ROOT, text=True, capture_output=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "powershell-failure-injection=pass" in result.stdout
 
 
 def test_failure_injection_model_rolls_back_only_completed_sides():
