@@ -4,6 +4,7 @@
 作業ブランチ: `feat/line-destination-routing`
 修正基点: `ca8e2eee9376cd1cf884ebf526b03607c8f7f608`
 Implementation Commit: `a5380fc664e6c55570c6e700ebfe649d86c4c252`
+Validation Commit: `1f461fa1b4cfe6c5098d8f3dc57176c5f09cc6e3`
 
 ## Required checks
 
