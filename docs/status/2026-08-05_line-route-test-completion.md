@@ -4,7 +4,9 @@ Status: `PRODUCTION_PERSONAL_CANDIDATE_READY_REVIEW_PENDING`
 
 作業日: 2026-08-05 JST（personal／groupの実送信および人間確認を同日実施）  
 実装ブランチ: `feat/line-destination-routing`  
-実装・試験対象SHA: `9a9ea475adbec3ad2b450725ce462a70ca091fa5`
+Route Test Execution SHA: `9a9ea475adbec3ad2b450725ce462a70ca091fa5`
+Evidence Commit／Current Remote Feature HEAD（前回証跡時点）: `e7ce07001fa94d8c7ea2686d746354ee5232d546`
+Main SHA: `6cf4d439c17c1899837452b43c3f903169df9dbf`
 
 ## Remote workflow results
 
@@ -17,7 +19,8 @@ Status: `PRODUCTION_PERSONAL_CANDIDATE_READY_REVIEW_PENDING`
 
 ## Safety verification
 
-- remote feature branch SHA: `9a9ea475adbec3ad2b450725ce462a70ca091fa5`
+- Route Test Execution SHA: `9a9ea475adbec3ad2b450725ce462a70ca091fa5`
+- Evidence Commit／Current Remote Feature HEAD（前回証跡時点）: `e7ce07001fa94d8c7ea2686d746354ee5232d546`
 - remote `main` SHA: `6cf4d439c17c1899837452b43c3f903169df9dbf`（不変）
 - Secret／User ID／groupId／Tokenの値: ログ・文書へ出力なし
 - Test IDのログ出現: 各Run 1件
@@ -26,6 +29,8 @@ Status: `PRODUCTION_PERSONAL_CANDIDATE_READY_REVIEW_PENDING`
 - Production Active Deployment: `8406f8b7-f3b3-45d6-a072-c177713500a6`
 - Production mode: `personal`
 - Candidate Version: `fef3f4c1-d4cc-476e-ae98-51daff127df0`
+- Candidate source commit: Cloudflare metadataに記録なし
+- Candidate normalized artifact comparison: `unverified`（Version artifact本体のread-only取得経路なし。推測でcommitを割り当てない）
 - Candidate traffic: `0%`（未Deploy）
 - Webhook delivery: disabled
 - Dormant endpoint: active
@@ -37,10 +42,15 @@ Cloudflare読み取り確認では、Active Deploymentは旧Production Version 1
 
 ## Gate
 
-personal／groupの両経路と人間による着信確認は完了した。次の承認待ち操作はCandidate VersionのDeployおよびProduction切替であり、本記録作成時点では実施していない。
+personal／groupの両経路と人間による着信確認は完了した。ただしCandidateのsource provenanceは未検証であるため、Candidate VersionのDeployおよびProduction切替はblockedとする。本記録作成時点では実施していない。
 
-禁止された操作（Candidate Deploy、Production traffic変更、`LINE_DESTINATION_MODE`変更、Cron／D1変更、main merge、追加通知）は行っていない。
+禁止された操作（Candidate Deploy、Production traffic変更、Candidate再Upload、`LINE_DESTINATION_MODE`変更、Cron／D1変更、main merge、追加通知）は行っていない。
 
 ## Security scope
 
 実際のSecret、User ID、groupId、Channel Access Token、Webhook URL、Cookie、Authorization値は記録しない。本文のTest IDは非秘密の配送証跡である。
+
+## Provenance gate
+
+`PRODUCTION_CANDIDATE_PROVENANCE_BLOCKED`
+Candidate VersionのID、tag、message、upload timestamp、handlers、compatibility date、D1 binding、runtime variable、Secret binding名、traffic 0%、Active Deployment未包含は確認済み。一方、Upload時source commitの記録がなく、Candidate artifact本体と承認対象sourceのnormalized matchを一意に確認できないため、Deploy承認へ進まない。
