@@ -203,7 +203,7 @@ function Get-D1Health {
 
 function Assert-RollbackState {
     param($State, $Previous)
-    if ($State.Active.VersionId -ne $Previous.Active.VersionId -or $State.Active.Percentage -ne 100 -or $State.GithubMode -ne $Previous.GithubMode -or $State.CloudflareMode -ne $Previous.CloudflareMode -or -not $State.CurrentHealth.Checked -or -not $State.TargetHealth.Checked -or -not $State.D1.Valid -or -not $State.EffectiveCron.Available -or @($State.EffectiveCron.Crons).Count -ne 1 -or @($State.EffectiveCron.Crons)[0] -ne $ExpectedCron) { throw 'rollback post-check failed.' }
+    if ($State.Active.VersionId -ne $Previous.Active.VersionId -or $State.Active.Percentage -ne 100 -or $State.GithubMode -ne $Previous.GithubMode -or $State.GithubState.State -ne $Previous.GithubState.State -or $State.CloudflareMode -ne $Previous.CloudflareMode -or -not $State.CurrentHealth.Checked -or -not $State.TargetHealth.Checked -or -not $State.D1.Valid -or -not $State.EffectiveCron.Available -or @($State.EffectiveCron.Crons).Count -ne 1 -or @($State.EffectiveCron.Crons)[0] -ne $ExpectedCron) { throw 'rollback post-check failed.' }
 }
 
 function Assert-HealthPayload {
@@ -357,7 +357,13 @@ try {
     $rollbackOk = $true
     try {
         if ($cloudflareChanged) { Invoke-WriteCommand 'wrangler' @('versions', 'deploy', "$($previous.Active.VersionId)@100%", '--name', $WorkerName, '--config', $productionConfigPath, '--message', 'Rollback destination switch after failed post-check', '-y') }
-        if ($githubChanged -and $previous.GithubMode) { Invoke-WriteCommand 'gh' @('variable', 'set', 'LINE_DESTINATION_MODE', '--body', $previous.GithubMode, '--repo', $Repository) }
+        if ($githubChanged) {
+            if ($previous.GithubState.State -eq 'absent') {
+                Invoke-WriteCommand 'gh' @('variable', 'delete', 'LINE_DESTINATION_MODE', '--repo', $Repository)
+            } else {
+                Invoke-WriteCommand 'gh' @('variable', 'set', 'LINE_DESTINATION_MODE', '--body', $previous.GithubMode, '--repo', $Repository)
+            }
+        }
         $rollbackState = Invoke-Preflight
         Assert-RollbackState $rollbackState $previous
     } catch { $rollbackOk = $false }

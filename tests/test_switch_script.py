@@ -48,6 +48,7 @@ def test_script_contains_transactional_rollback_contract():
         "INCONSISTENT_DESTINATION_STATE",
         "Rollback destination switch",
         "LINE_DESTINATION_MODE",
+        "variable', 'delete",
         "d1', 'execute",
         "CurrentHealthUrl and TargetHealthUrl are required for -Apply",
         "ExpectedGroupConfigured",

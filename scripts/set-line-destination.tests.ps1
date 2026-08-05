@@ -107,8 +107,8 @@ if (-not $httpHealth.Checked -or -not $httpHealth.GroupConfigured) { throw 'HTTP
 $httpHealthMode = 'non200'; AssertThrows { Test-Health 'group' $true } 'HTTP non-200 path'; $httpHealthMode = 'ok'
 $HealthAdapter = ${function:HealthFixture}
 $ExpectedGroupConfigured = 'false'
-$previous = [pscustomobject]@{ Active = [pscustomobject]@{ VersionId = 'old'; Percentage = 100 }; GithubMode = 'personal'; CloudflareMode = 'personal' }
-$badRollback = [pscustomobject]@{ Active = [pscustomobject]@{ VersionId = 'new'; Percentage = 100 }; GithubMode = 'personal'; CloudflareMode = 'personal'; CurrentHealth = [pscustomobject]@{ Checked = $true }; TargetHealth = [pscustomobject]@{ Checked = $true }; D1 = [pscustomobject]@{ Valid = $true }; EffectiveCron = [pscustomobject]@{ Available = $true; Crons = @('* * * * *') } }
+$previous = [pscustomobject]@{ Active = [pscustomobject]@{ VersionId = 'old'; Percentage = 100 }; GithubMode = 'personal'; GithubState = [pscustomobject]@{ State = 'absent' }; CloudflareMode = 'personal' }
+$badRollback = [pscustomobject]@{ Active = [pscustomobject]@{ VersionId = 'new'; Percentage = 100 }; GithubMode = 'personal'; GithubState = [pscustomobject]@{ State = 'personal' }; CloudflareMode = 'personal'; CurrentHealth = [pscustomobject]@{ Checked = $true }; TargetHealth = [pscustomobject]@{ Checked = $true }; D1 = [pscustomobject]@{ Valid = $true }; EffectiveCron = [pscustomobject]@{ Available = $true; Crons = @('* * * * *') } }
 AssertThrows { Assert-RollbackState $badRollback $previous } 'rollback state mismatch'
 $writeCount = 0; $preflight = Invoke-Preflight; if ($writeCount -ne 0) { throw 'read-only preflight issued a write' }; if (-not $preflight.CurrentHealth.Checked -or -not $preflight.TargetHealth.Checked -or -not $preflight.EffectiveCron.Available) { throw 'WhatIf read probes were not executed' }
 Write-Output 'powershell-failure-injection=pass'
