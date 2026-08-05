@@ -17,6 +17,10 @@ def test_launcher_uses_one_process_token_lifecycle_and_fail_closed_gates():
         "token_value_logged = $false",
         "gated_switch_failed",
         "inconsistent_destination_state",
+        "child_token_not_inherited",
+        "child_token_inherited = $childTokenInherited",
+        "failure_phase = $failurePhase",
+        "effective_cron_unverified",
     ):
         assert marker in text
 

@@ -22,6 +22,8 @@ $groupWhatIf = $false
 $personalWhatIf = $false
 $applyPassed = $false
 $tokenCleared = $false
+$childTokenInherited = $false
+$failurePhase = 'initialization'
 
 function Invoke-GatedSwitch {
     param(
@@ -52,7 +54,14 @@ function Invoke-GatedSwitch {
         $_ -match '^(preflight|active_version|active_percentage|current_mode|target_version|health_probe|current_health_probe|target_health_probe|github_user_verified|effective_cron_probe|schedule_count|d1_state_valid|secrets_read|whatif|apply)='
     })
     $safeLines | Write-Output
-    if ($exitCode -ne 0) { throw 'gated_switch_failed' }
+    if ($exitCode -ne 0) {
+        $combined = $output -join [Environment]::NewLine
+        if ($combined -match 'effective Cron could not be verified') { throw 'effective_cron_unverified' }
+        if ($combined -match 'GitHub and Cloudflare destination modes differ') { throw 'destination_mode_mismatch' }
+        if ($combined -match 'health') { throw 'health_gate_failed' }
+        if ($combined -match 'D1') { throw 'd1_gate_failed' }
+        throw 'gated_switch_failed'
+    }
 }
 
 try {
@@ -73,21 +82,33 @@ try {
         throw 'schedules_token_missing'
     }
 
+    & powershell.exe -NoProfile -Command "if ([string]::IsNullOrWhiteSpace(`$env:OKAZ_CF_SCHEDULES_READ_TOKEN)) { exit 7 } else { exit 0 }"
+    if ($LASTEXITCODE -ne 0) { throw 'child_token_not_inherited' }
+    $childTokenInherited = $true
+
+    $failurePhase = 'group_whatif'
     Invoke-GatedSwitch -Mode group -VersionId $GroupVersionId -TargetHealth $groupHealth
     $groupWhatIf = $true
+    $failurePhase = 'personal_whatif'
     Invoke-GatedSwitch -Mode personal -VersionId $PersonalVersionId -TargetHealth $personalHealth
     $personalWhatIf = $true
 
     if ($Apply) {
+        $failurePhase = 'group_apply'
         Invoke-GatedSwitch -Mode group -VersionId $GroupVersionId -TargetHealth $groupHealth -ExecuteApply
         $applyPassed = $true
     }
+    $failurePhase = $null
     $status = 'passed'
 } catch {
     $failureClass = if ($_.Exception.Message -like 'INCONSISTENT_DESTINATION_STATE*') {
         'inconsistent_destination_state'
     } elseif ($_.Exception.Message -eq 'schedules_token_missing') {
         'schedules_token_missing'
+    } elseif ($_.Exception.Message -eq 'child_token_not_inherited') {
+        'child_token_not_inherited'
+    } elseif ($_.Exception.Message -in @('effective_cron_unverified', 'destination_mode_mismatch', 'health_gate_failed', 'd1_gate_failed')) {
+        $_.Exception.Message
     } else {
         'gated_switch_failed'
     }
@@ -100,6 +121,8 @@ try {
         group_whatif = $groupWhatIf
         personal_whatif = $personalWhatIf
         apply = $applyPassed
+        child_token_inherited = $childTokenInherited
+        failure_phase = $failurePhase
         token_value_logged = $false
         token_cleared = $tokenCleared
         completed_at_jst = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow, 'Tokyo Standard Time').ToString('yyyy-MM-ddTHH:mm:sszzz')
