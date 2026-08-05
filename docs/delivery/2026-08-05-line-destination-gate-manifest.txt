@@ -3,10 +3,10 @@ Scope: local implementation and Human Checkpoint B repair only
 Work date: 2026-08-05 JST
 Feature branch: feat/line-destination-routing
 Repair base: ca8e2eee9376cd1cf884ebf526b03607c8f7f608
-Packaged Git Commit: recorded after final repair commit
-Packaged Git Tree: recorded after final repair commit
-Validation executed against Commit: recorded after final repair commit
-Evidence-only final Commit: none
+Packaged Git Commit: 068770a6e6529a6682a27fe68fb77511d6f74d01
+Packaged Git Tree: 2d453da388f1d6f497247d4c8233a3e9179ea942
+Validation executed against Commit: 068770a6e6529a6682a27fe68fb77511d6f74d01
+Evidence-only final Commit: created after this manifest update; recorded in final handoff
 
 Included source and review files:
 .gitignore
