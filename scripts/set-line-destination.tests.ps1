@@ -19,7 +19,16 @@ function ReadOnlyFixture {
     if ($File -eq 'wrangler' -and $Arguments -contains 'whoami') { return '180e8e731977b6770c393cd5c17cab91' }
     if ($File -eq 'wrangler' -and $Arguments -contains 'deployments') { return '{"id":"11111111-1111-4111-8111-111111111111","versions":[{"version_id":"22222222-2222-4222-8222-222222222222","percentage":100}]}' }
     if ($File -eq 'wrangler' -and $Arguments -contains 'versions') { return '{"id":"22222222-2222-4222-8222-222222222222","resources":{"script":{"handlers":["scheduled","fetch"]},"script_runtime":{"compatibility_date":"2026-08-02"},"bindings":[{"name":"DB","type":"d1","database_id":"04c229e8-a76b-40a8-a4b4-17c78bdcf6ff"}]}}' }
-    if ($File -eq 'wrangler' -and $Arguments -contains 'schedules') { return $(if ($cronMode -eq 'mismatch') { '[{"cron":"*/5 * * * *"}]' } else { '[{"cron":"* * * * *"}]' }) }
+    if ($File -eq 'schedules-api') {
+        if ($cronMode -eq 'zero') { return '{"success":true,"errors":[],"result":{"schedules":[]}}' }
+        if ($cronMode -eq 'two') { return '{"success":true,"errors":[],"result":{"schedules":[{"cron":"* * * * *","created_on":"2026-08-04T12:51:43Z","modified_on":"2026-08-04T12:51:43Z"},{"cron":"* * * * *","created_on":"2026-08-04T12:51:43Z","modified_on":"2026-08-04T12:51:43Z"}]}}' }
+        if ($cronMode -eq 'mismatch') { return '{"success":true,"errors":[],"result":{"schedules":[{"cron":"*/5 * * * *","created_on":"2026-08-04T12:51:43Z","modified_on":"2026-08-04T12:51:43Z"}]}}' }
+        if ($cronMode -eq 'errors') { return '{"success":true,"errors":[{"code":1}],"result":{"schedules":[]}}' }
+        if ($cronMode -eq 'malformed') { return '{"success":true,"result":null}' }
+        if ($cronMode -eq 'missing-created') { return '{"success":true,"errors":[],"result":{"schedules":[{"cron":"* * * * *","modified_on":"2026-08-04T12:51:43Z"}]}}' }
+        if ($cronMode -eq 'missing-modified') { return '{"success":true,"errors":[],"result":{"schedules":[{"cron":"* * * * *","created_on":"2026-08-04T12:51:43Z"}]}}' }
+        return '{"success":true,"errors":[],"result":{"schedules":[{"cron":"* * * * *","created_on":"2026-08-04T12:51:43Z","modified_on":"2026-08-04T12:51:43Z"}]}}'
+    }
     if ($File -eq 'wrangler' -and $Arguments -contains 'd1') {
         if ($d1Mode -eq 'pending') { return '[{"results":[{"version":1,"pending_count":1,"failures":0,"active_lease_count":0}]}]' }
         if ($d1Mode -eq 'failure') { return '[{"results":[{"version":1,"pending_count":0,"failures":1,"active_lease_count":0}]}]' }
@@ -62,6 +71,14 @@ function AssertThrows([scriptblock]$Action, [string]$Label) {
 
 $cron = Get-EffectiveCron
 if (-not $cron.Available -or $cron.Crons.Count -ne 1 -or $cron.Crons[0] -ne '* * * * *') { throw 'cron fixture failed' }
+$cronMode = 'zero'; if ((Get-EffectiveCron).Available) { throw 'zero schedule should fail closed' }
+$cronMode = 'two'; if ((Get-EffectiveCron).Available) { throw 'duplicate schedules should fail closed' }
+$cronMode = 'mismatch'; if ((Get-EffectiveCron).Available) { throw 'cron mismatch should fail closed' }
+$cronMode = 'errors'; if ((Get-EffectiveCron).Available) { throw 'API errors should fail closed' }
+$cronMode = 'malformed'; if ((Get-EffectiveCron).Available) { throw 'malformed API should fail closed' }
+$cronMode = 'missing-created'; if ((Get-EffectiveCron).Available) { throw 'missing created_on should fail closed' }
+$cronMode = 'missing-modified'; if ((Get-EffectiveCron).Available) { throw 'missing modified_on should fail closed' }
+$cronMode = 'ok'
 $d1 = Get-D1Health
 if (-not $d1.Valid -or $d1.Pending -ne 0 -or $d1.Failures -ne 0 -or $d1.ActiveLease -ne 0) { throw 'd1 fixture failed' }
 
@@ -91,7 +108,7 @@ $httpHealthMode = 'non200'; AssertThrows { Test-Health 'group' $true } 'HTTP non
 $HealthAdapter = ${function:HealthFixture}
 $ExpectedGroupConfigured = 'false'
 $previous = [pscustomobject]@{ Active = [pscustomobject]@{ VersionId = 'old'; Percentage = 100 }; GithubMode = 'personal'; CloudflareMode = 'personal' }
-$badRollback = [pscustomobject]@{ Active = [pscustomobject]@{ VersionId = 'new'; Percentage = 100 }; GithubMode = 'personal'; CloudflareMode = 'personal'; Health = [pscustomobject]@{ Checked = $true }; D1 = [pscustomobject]@{ Valid = $true }; EffectiveCron = [pscustomobject]@{ Available = $true; Crons = @('* * * * *') } }
+$badRollback = [pscustomobject]@{ Active = [pscustomobject]@{ VersionId = 'new'; Percentage = 100 }; GithubMode = 'personal'; CloudflareMode = 'personal'; CurrentHealth = [pscustomobject]@{ Checked = $true }; TargetHealth = [pscustomobject]@{ Checked = $true }; D1 = [pscustomobject]@{ Valid = $true }; EffectiveCron = [pscustomobject]@{ Available = $true; Crons = @('* * * * *') } }
 AssertThrows { Assert-RollbackState $badRollback $previous } 'rollback state mismatch'
-$writeCount = 0; [void](Invoke-Preflight); if ($writeCount -ne 0) { throw 'read-only preflight issued a write' }
+$writeCount = 0; $preflight = Invoke-Preflight; if ($writeCount -ne 0) { throw 'read-only preflight issued a write' }; if (-not $preflight.CurrentHealth.Checked -or -not $preflight.TargetHealth.Checked -or -not $preflight.EffectiveCron.Available) { throw 'WhatIf read probes were not executed' }
 Write-Output 'powershell-failure-injection=pass'

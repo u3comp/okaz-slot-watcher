@@ -19,13 +19,9 @@ def run_script(*args):
 
 def test_whatif_executes_read_only_preflight_without_write_commands():
     result = run_script("-Mode", "personal", "-WhatIf")
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "whatif=read_only" in result.stdout
-    assert "secrets_read=false" in result.stdout
-    assert "github_user_verified=True" in result.stdout
-    assert "d1_state_valid=True" in result.stdout
-    assert "effective_cron_probe=False" in result.stdout
-    assert "deploy" not in result.stdout.lower().split("whatif=")[0]
+    assert result.returncode != 0
+    assert "effective Cron could not be verified" in (result.stdout + result.stderr)
+    assert "deploy" not in (result.stdout + result.stderr).lower()
 
 
 def test_repository_mismatch_fails_closed_before_mutation():
@@ -53,13 +49,13 @@ def test_script_contains_transactional_rollback_contract():
         "Rollback destination switch",
         "LINE_DESTINATION_MODE",
         "d1', 'execute",
-        "HealthUrl is required for -Apply",
-        "ExpectedGroupConfigured must be explicitly true or false",
+        "CurrentHealthUrl and TargetHealthUrl are required for -Apply",
+        "ExpectedGroupConfigured",
         "Cloudflare health response schema is not the exact allowlist",
         "line_user_id_configured",
         "line_group_id_configured",
         "GitHub user mismatch",
-        "effective Cron mismatch",
+        "effective Cron could not be verified",
         "ReadOnlyAdapter",
         "WriteAdapter",
     ):
