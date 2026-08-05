@@ -12,6 +12,8 @@
 - Production正本 `cloudflare-worker/wrangler.production.toml`
 - GitHub／Cloudflare切替のread-only preflight、post-check、rollback契約
 - GitHubユーザー一致、D1 JSON assert、実効Cron取得不能時のApply fail-closed、Health必須化
+- LINE検証POSTのHTTP 200契約、Tail子プロセス停止確認、実コマンドに基づくSecret名一覧とVersion識別
+- Health JSONの3キーexact allowlistと設定boolean検証
 - ルーティング、fail-closed、Capture／Dormantの自動テスト
 
 ### Changed
@@ -20,6 +22,7 @@
 - 未設定モードは `personal` として後方互換に処理
 - 不正モードまたは選択先不足は送信せずfail closed
 - Cloudflare Workerに非機密の `/health` 状態応答を追加
+- Capture Workerは署名済み正常JSON（`events: []`を含む）へHTTP 200を返し、no-op時はログを出さない
 
 ### Security
 

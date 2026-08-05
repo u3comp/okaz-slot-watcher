@@ -93,7 +93,7 @@ export async function handleCaptureRequest(
   } catch {
     return response(400);
   }
-  if (session.captured) return response(204);
+  if (session.captured) return response(200, "ok");
   const events = payload && typeof payload === "object" && Array.isArray((payload as { events?: unknown }).events)
     ? (payload as { events: unknown[] }).events
     : [];
@@ -107,9 +107,9 @@ export async function handleCaptureRequest(
     if (!groupId) continue;
     session.captured = true;
     emitGroupCaptureEvent(groupId);
-    return response(200, "captured");
+    return response(200, "ok");
   }
-  return response(204);
+  return response(200, "ok");
 }
 
 export default {

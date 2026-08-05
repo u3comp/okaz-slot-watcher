@@ -17,6 +17,9 @@ param(
 
     [string]$HealthUrl,
 
+    [ValidateSet('true', 'false')]
+    [string]$ExpectedGroupConfigured,
+
     [string]$DatabaseName = 'okaz-slot-watcher',
 
     [string]$ProductionConfig = 'cloudflare-worker/wrangler.production.toml'
@@ -145,22 +148,39 @@ function Assert-RollbackState {
     if ($State.Active.VersionId -ne $Previous.Active.VersionId -or $State.Active.Percentage -ne 100 -or $State.GithubMode -ne $Previous.GithubMode -or $State.CloudflareMode -ne $Previous.CloudflareMode -or -not $State.Health.Checked -or -not $State.D1.Valid -or -not $State.EffectiveCron.Available -or @($State.EffectiveCron.Crons).Count -ne 1 -or @($State.EffectiveCron.Crons)[0] -ne $ExpectedCron) { throw 'rollback post-check failed.' }
 }
 
+function Assert-HealthPayload {
+    param($Health, [string]$ExpectedMode, [bool]$ExpectedGroupConfiguredValue)
+    if (-not $Health -or $Health -is [array]) { throw 'Cloudflare health response must be one JSON object.' }
+    $allowed = @('line_destination_mode', 'line_user_id_configured', 'line_group_id_configured')
+    $keys = @($Health.PSObject.Properties.Name)
+    if ($keys.Count -ne $allowed.Count -or @($keys | Where-Object { $_ -notin $allowed }).Count -ne 0 -or @($allowed | Where-Object { $_ -notin $keys }).Count -ne 0) {
+        throw 'Cloudflare health response schema is not the exact allowlist.'
+    }
+    if ([string]$Health.line_destination_mode -ne $ExpectedMode) { throw 'Cloudflare health mode does not match the expected mode.' }
+    if ($Health.line_user_id_configured -isnot [bool] -or $Health.line_user_id_configured -ne $true) { throw 'Cloudflare health user configuration is not true.' }
+    if ($Health.line_group_id_configured -isnot [bool]) { throw 'Cloudflare health group configuration is not boolean.' }
+    if ([bool]$Health.line_group_id_configured -ne $ExpectedGroupConfiguredValue) { throw 'Cloudflare health group configuration does not match the expected migration stage.' }
+    if ($ExpectedMode -eq 'group' -and -not $ExpectedGroupConfiguredValue) { throw 'Group mode requires the group destination to be configured.' }
+    return [pscustomobject]@{
+        Checked = $true
+        Mode = [string]$Health.line_destination_mode
+        UserConfigured = [bool]$Health.line_user_id_configured
+        GroupConfigured = [bool]$Health.line_group_id_configured
+    }
+}
+
 function Test-Health {
-    param([string]$ExpectedMode)
+    param([string]$ExpectedMode, [bool]$ExpectedGroupConfiguredValue)
     if ([string]::IsNullOrWhiteSpace($HealthUrl)) { return [pscustomobject]@{ Checked = $false; Mode = $null } }
     if ($HealthAdapter) {
-        $health = & $HealthAdapter $HealthUrl
-        if ([int]$health.status -ne 200) { throw 'Cloudflare health endpoint did not return HTTP 200.' }
-        if ([string]$health.line_destination_mode -ne $ExpectedMode) { throw 'Cloudflare health mode does not match the expected mode.' }
-        if ($health.PSObject.Properties.Name -contains 'line_user_id' -or $health.PSObject.Properties.Name -contains 'line_group_id') { throw 'Health response exposed an ID.' }
-        return [pscustomobject]@{ Checked = $true; Mode = [string]$health.line_destination_mode }
+        $adapted = & $HealthAdapter $HealthUrl
+        if ([int]$adapted.StatusCode -ne 200) { throw 'Cloudflare health endpoint did not return HTTP 200.' }
+        return Assert-HealthPayload $adapted.Body $ExpectedMode $ExpectedGroupConfiguredValue
     }
     $response = Invoke-WebRequest -Method Get -Uri $HealthUrl -TimeoutSec 15 -UseBasicParsing
     if ($response.StatusCode -ne 200) { throw 'Cloudflare health endpoint did not return HTTP 200.' }
     $health = Convert-JsonOrThrow $response.Content 'Cloudflare health'
-    $safeMode = [string]$health.line_destination_mode
-    if ($safeMode -ne $ExpectedMode) { throw 'Cloudflare health mode does not match the expected mode.' }
-    return [pscustomobject]@{ Checked = $true; Mode = $safeMode }
+    return Assert-HealthPayload $health $ExpectedMode $ExpectedGroupConfiguredValue
 }
 
 function Invoke-Preflight {
@@ -188,7 +208,12 @@ function Invoke-Preflight {
     $githubMode = Get-DestinationMode
     $cloudflareMode = Get-ModeFromVersion $activeVersion
     if ($githubMode -ne $cloudflareMode) { throw 'GitHub and Cloudflare destination modes differ.' }
-    $health = Test-Health $cloudflareMode
+    $expectedGroup = $false
+    if (-not [string]::IsNullOrWhiteSpace($HealthUrl)) {
+        if ([string]::IsNullOrWhiteSpace($ExpectedGroupConfigured)) { throw 'ExpectedGroupConfigured must be explicitly true or false when HealthUrl is used.' }
+        $expectedGroup = [bool]::Parse($ExpectedGroupConfigured)
+    }
+    $health = Test-Health $cloudflareMode $expectedGroup
     $cron = Get-EffectiveCron
     if ($cron.Available -and (@($cron.Crons).Count -ne 1 -or @($cron.Crons)[0] -ne $ExpectedCron)) { throw 'effective Cron mismatch.' }
     $d1 = Get-D1Health

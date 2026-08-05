@@ -6,6 +6,7 @@ $cronMode = 'ok'
 $d1Mode = 'ok'
 $userMode = 'ok'
 $writeMode = 'ok'
+$healthMode = 'personal-ok'
 $writeCount = 0
 
 function ReadOnlyFixture {
@@ -37,14 +38,23 @@ function WriteFixture {
 
 function HealthFixture {
     param([string]$Url)
-    if ($writeMode -eq 'health-failure') { return [pscustomobject]@{ status = 500; line_destination_mode = 'personal' } }
-    return [pscustomobject]@{ status = 200; line_destination_mode = 'personal'; line_user_id_configured = $true; line_group_id_configured = $false }
+    $body = switch ($healthMode) {
+        'group-ok' { [pscustomobject]@{ line_destination_mode = 'group'; line_user_id_configured = $true; line_group_id_configured = $true } }
+        'group-missing' { [pscustomobject]@{ line_destination_mode = 'group'; line_user_id_configured = $true; line_group_id_configured = $false } }
+        'user-missing' { [pscustomobject]@{ line_destination_mode = 'personal'; line_user_id_configured = $false; line_group_id_configured = $false } }
+        'mode-mismatch' { [pscustomobject]@{ line_destination_mode = 'group'; line_user_id_configured = $true; line_group_id_configured = $true } }
+        'id-key' { [pscustomobject]@{ line_destination_mode = 'personal'; line_user_id_configured = $true; line_group_id_configured = $false; line_group_id = 'fixture-not-a-real-id' } }
+        'unknown-key' { [pscustomobject]@{ line_destination_mode = 'personal'; line_user_id_configured = $true; line_group_id_configured = $false; extra = $true } }
+        default { [pscustomobject]@{ line_destination_mode = 'personal'; line_user_id_configured = $true; line_group_id_configured = $false } }
+    }
+    return [pscustomobject]@{ StatusCode = $(if ($healthMode -eq 'http-failure') { 503 } else { 200 }); Body = $body }
 }
 
 $ReadOnlyAdapter = ${function:ReadOnlyFixture}
 $WriteAdapter = ${function:WriteFixture}
 $HealthAdapter = ${function:HealthFixture}
 $HealthUrl = 'https://health.invalid/health'
+$ExpectedGroupConfigured = 'false'
 
 function AssertThrows([scriptblock]$Action, [string]$Label) {
     try { & $Action; throw "expected failure: $Label" } catch { if ($_.Exception.Message -like "expected failure:*") { throw } }
@@ -59,7 +69,27 @@ $userMode = 'wrong'; AssertThrows { Invoke-Preflight } 'gh user mismatch'; $user
 $cronMode = 'mismatch'; AssertThrows { Invoke-Preflight } 'cron mismatch'; $cronMode = 'ok'
 $d1Mode = 'pending'; AssertThrows { Get-D1Health } 'pending state'; $d1Mode = 'failure'; AssertThrows { Get-D1Health } 'failure state'; $d1Mode = 'lease'; AssertThrows { Get-D1Health } 'active lease'; $d1Mode = 'ok'
 $writeMode = 'failure'; AssertThrows { Invoke-WriteCommand 'wrangler' @('versions','deploy') } 'deploy failure'; $writeMode = 'ok'
-$writeMode = 'health-failure'; AssertThrows { Test-Health 'personal' } 'health failure'; $writeMode = 'ok'
+$healthMode = 'group-ok'; $groupHealth = Test-Health 'group' $true; if (-not $groupHealth.Checked -or -not $groupHealth.GroupConfigured) { throw 'group health fixture failed' }
+$healthMode = 'group-missing'; AssertThrows { Test-Health 'group' $true } 'group not configured'
+$healthMode = 'user-missing'; AssertThrows { Test-Health 'personal' $false } 'personal user not configured'
+$healthMode = 'mode-mismatch'; AssertThrows { Test-Health 'personal' $true } 'health mode mismatch'
+$healthMode = 'id-key'; AssertThrows { Test-Health 'personal' $false } 'health ID key'
+$healthMode = 'unknown-key'; AssertThrows { Test-Health 'personal' $false } 'health unknown key'
+$healthMode = 'http-failure'; AssertThrows { Test-Health 'personal' $false } 'health HTTP status'
+$healthMode = 'personal-ok'
+
+$HealthAdapter = $null
+$httpHealthMode = 'ok'
+function Invoke-WebRequest {
+    param([string]$Method, [string]$Uri, [int]$TimeoutSec, [switch]$UseBasicParsing)
+    if ($httpHealthMode -eq 'non200') { return [pscustomobject]@{ StatusCode = 500; Content = '{}' } }
+    return [pscustomobject]@{ StatusCode = 200; Content = '{"line_destination_mode":"group","line_user_id_configured":true,"line_group_id_configured":true}' }
+}
+$httpHealth = Test-Health 'group' $true
+if (-not $httpHealth.Checked -or -not $httpHealth.GroupConfigured) { throw 'HTTP JSON health path failed' }
+$httpHealthMode = 'non200'; AssertThrows { Test-Health 'group' $true } 'HTTP non-200 path'; $httpHealthMode = 'ok'
+$HealthAdapter = ${function:HealthFixture}
+$ExpectedGroupConfigured = 'false'
 $previous = [pscustomobject]@{ Active = [pscustomobject]@{ VersionId = 'old'; Percentage = 100 }; GithubMode = 'personal'; CloudflareMode = 'personal' }
 $badRollback = [pscustomobject]@{ Active = [pscustomobject]@{ VersionId = 'new'; Percentage = 100 }; GithubMode = 'personal'; CloudflareMode = 'personal'; Health = [pscustomobject]@{ Checked = $true }; D1 = [pscustomobject]@{ Valid = $true }; EffectiveCron = [pscustomobject]@{ Available = $true; Crons = @('* * * * *') } }
 AssertThrows { Assert-RollbackState $badRollback $previous } 'rollback state mismatch'
