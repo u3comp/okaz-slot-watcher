@@ -24,6 +24,9 @@ def test_launcher_uses_one_process_token_lifecycle_and_fail_closed_gates():
         "cloudflare-worker\\node_modules\\.bin",
         "project_cli_path_configured = $projectCliPathConfigured",
         "wrangler_cli_unavailable",
+        "ConvertTo-SafeErrorExcerpt",
+        "safe_error_excerpt = $safeErrorExcerpt",
+        "[REDACTED]",
     ):
         assert marker in text
 

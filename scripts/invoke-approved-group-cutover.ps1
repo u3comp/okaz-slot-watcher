@@ -26,6 +26,20 @@ $tokenCleared = $false
 $childTokenInherited = $false
 $failurePhase = 'initialization'
 $projectCliPathConfigured = $false
+$safeErrorExcerpt = $null
+
+function ConvertTo-SafeErrorExcerpt {
+    param([string]$Text)
+    $safe = $Text -replace '(?i)Bearer\s+\S+', 'Bearer [REDACTED]'
+    $safe = $safe -replace '(?i)(authorization|cookie|token)\s*[:=]\s*\S+', '$1=[REDACTED]'
+    $safe = $safe -replace 'https?://\S+', '[URL]'
+    $safe = $safe -replace '[A-Za-z]:\\[^\r\n|]+', '[PATH]'
+    $safe = $safe -replace '[A-Za-z0-9_-]{30,}', '[REDACTED]'
+    $safe = $safe -replace '[\x00-\x1F\x7F]+', ' '
+    $safe = ($safe -replace '\s+', ' ').Trim()
+    if ($safe.Length -gt 256) { $safe = $safe.Substring(0, 256) }
+    return $safe
+}
 
 function Invoke-GatedSwitch {
     param(
@@ -58,6 +72,7 @@ function Invoke-GatedSwitch {
     $safeLines | Write-Output
     if ($exitCode -ne 0) {
         $combined = $output -join [Environment]::NewLine
+        $script:safeErrorExcerpt = ConvertTo-SafeErrorExcerpt (($output | Select-Object -Last 8) -join [Environment]::NewLine)
         if ($combined -match 'effective Cron could not be verified') { throw 'effective_cron_unverified' }
         if ($combined -match 'wrangler CLI is not available') { throw 'wrangler_cli_unavailable' }
         if ($combined -match 'gh CLI is not available') { throw 'gh_cli_unavailable' }
@@ -133,6 +148,7 @@ try {
         child_token_inherited = $childTokenInherited
         failure_phase = $failurePhase
         project_cli_path_configured = $projectCliPathConfigured
+        safe_error_excerpt = $safeErrorExcerpt
         token_value_logged = $false
         token_cleared = $tokenCleared
         completed_at_jst = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow, 'Tokyo Standard Time').ToString('yyyy-MM-ddTHH:mm:sszzz')
