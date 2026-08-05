@@ -17,3 +17,10 @@ Allowlist: test fixtures under `tests/` and `cloudflare-worker/tests/`; values a
 - raw Tail JSON persisted: false
 - Secret value retrieved: false
 - Cloudflare／GitHub Secret names only were inspected
+
+## Candidate gate delta
+
+- candidate Version: recorded as non-deployed metadata only
+- Preview response: no ID, token, header, or body secret recorded
+- Actions personal/group dispatch: not executed at this evidence point
+- remote feature branch: not pushed at this evidence point

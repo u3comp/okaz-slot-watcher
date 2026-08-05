@@ -23,6 +23,8 @@
 - Webhook endpointは保持、Webhook配送は無効、Capture Channel Secretは削除済み
 - Dormant bindings 0、永続ログ無効、Capture／Tail残存プロセス0
 - groupId value logged: false、Production通知送信なし
+- Candidate Version `fef3f4c1-d4cc-476e-ae98-51daff127df0`をpersonal modeでUpload済み、Preview `/health`はHTTP 200、traffic 0%
+- Preview前後のD1 versionは494で不変、候補はProduction Active Deploymentに含まれていない
 
 ## Implemented locally
 
@@ -57,6 +59,8 @@
 
 - `LINE_DESTINATION_MODE`のProduction設定変更
 - personal／group実配送E2E
+- remote feature branch push
+- GitHub Actions branch指定`line_test`
 - Production切替
 - remote push、main統合
 
@@ -66,4 +70,6 @@
 
 ## Status
 
-`PRODUCTION_PERSONAL_CANDIDATE_PREPARATION_APPROVED`
+`PRODUCTION_CANDIDATE_VALIDATION_BLOCKED`
+
+Blocked理由: remote mainのWorkflow／CLIにはdestination overrideがなく、feature branch未Push時点ではpersonal／group実送信を実施できなかった。次の承認範囲はfeature branch pushとbranch指定line_testのみ。

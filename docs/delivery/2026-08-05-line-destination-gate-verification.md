@@ -1,7 +1,7 @@
 # Completion Verification — LINE Destination Gate Repair
 
 作業日: 2026-08-05 JST（差戻し修正）
-状態: `CAPTURE_PHASE_COMPLETE_PRODUCTION_CANDIDATE_PENDING`
+状態: `PRODUCTION_CANDIDATE_VALIDATION_BLOCKED`
 修正基点: `ca8e2eee9376cd1cf884ebf526b03607c8f7f608`
 Implementation Commit: `a5380fc664e6c55570c6e700ebfe649d86c4c252`
 Validation Commit: `1f461fa1b4cfe6c5098d8f3dc57176c5f09cc6e3`
@@ -24,6 +24,7 @@ Capture Evidence Commit: `adcd6862d522d3ac4a8c93ad29fa34396403e44a`
 - Captureは`secrets_set`、`tail_stopped=true`で完了した。groupId値は出力・ファイル・文書・Git・Artifactへ記録していない。
 - GitHub `LINE_GROUP_ID`はconfigured。Cloudflare Secret Version `fc763ea1-1c74-41b6-92d6-b42570566b3c`は未Deploy、Production traffic 0%。
 - Capture endpointはDormant Version `de73b291-257c-470f-8b0a-690bda425315`へ置換し、Channel Secretを削除した。Webhook URLは保持、配送は無効、bindings 0、永続ログ無効。
+- Production候補Version `fef3f4c1-d4cc-476e-ae98-51daff127df0`はpersonal modeでUpload済み、traffic 0%。Preview `/health`はHTTP 200、exact 3-key、D1 versionは494で前後不変。
 
 ## Validation
 
@@ -46,4 +47,4 @@ Capture／DormantのみHuman承認下で外部変更した。Production Worker V
 
 ## Human gate
 
-Production候補Versionは最新featureコードから別途Uploadし、未DeployでBindings、personal mode、Preview `/health`を確認する。既存Secret VersionをProductionへ直接Deployしてはならない。Production Deployとmode切替は別Human承認まで禁止する。
+Production候補VersionはUpload済みで、未DeployのBindings、personal mode、Preview `/health`を確認済み。既存Secret VersionをProductionへ直接Deployしてはならない。remote mainのWorkflow／CLIにdestination overrideがないためActions実送信は未実施であり、次の承認範囲はfeature branch pushとbranch指定line_testのみ。Production Deployとmode切替は別Human承認まで禁止する。

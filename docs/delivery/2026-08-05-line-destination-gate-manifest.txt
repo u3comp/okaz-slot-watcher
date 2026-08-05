@@ -18,6 +18,10 @@ ZIP SHA-256: supplied by the external final attestation because an archive canno
 Packaged Commit match: 52 source/review entries match the Git tree byte-for-byte
 Evidence overrides: manifest, verification, scan, and checksum files are final working-tree attestations over the Evidence-only HEAD
 Archive note: the named ZIP is the previous Checkpoint B package; Capture execution evidence is recorded in Git and is not claimed to be inside that earlier archive.
+Current status: PRODUCTION_CANDIDATE_VALIDATION_BLOCKED
+Candidate Version: fef3f4c1-d4cc-476e-ae98-51daff127df0 (personal; Preview health pass; traffic 0%; not deployed)
+Blocked reason: remote main lacked destination override; feature branch push and branch line_test were not yet executed at this evidence point.
+Next approved scope: feature branch push and one personal plus one group branch line_test; no main or Production change.
 
 Included source and review files:
 .gitignore

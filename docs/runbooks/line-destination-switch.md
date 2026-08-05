@@ -49,6 +49,17 @@ powershell -File scripts/set-line-destination.ps1 -Mode personal -Apply -Cloudfl
 
 Cloudflare Versionの承認済みIDがない場合は、推測でDeployせずHuman承認へ戻る。
 
+## Candidate route tests（feature branch only）
+
+Production候補VersionのUploadとPreview `/health`が成功しても、remote mainにdestination overrideがない場合は実送信しない。Human承認後に`feat/line-destination-routing`だけをpushし、branch上のWorkflow入力を読み取り確認してから次を各1回だけ実行する。
+
+```powershell
+gh workflow run availability-watcher.yml --repo u3comp/okaz-slot-watcher --ref feat/line-destination-routing -f mode=line_test -f line_destination=personal
+gh workflow run availability-watcher.yml --repo u3comp/okaz-slot-watcher --ref feat/line-destination-routing -f mode=line_test -f line_destination=group
+```
+
+personal成功と人間着信確認の後にgroupへ進む。同じTest IDの再送、main変更、Production Deploy、Variable変更、Cron／D1変更は行わない。
+
 ## Capture／Dormant
 
 Capture Phaseは2026-08-05 JSTに完了した。Remote ProbeでHTTP 200、Worker outcome正常、capture eventなしを確認後、署名検証済みgroupイベントの専用イベントをローカルOrchestratorが1件だけ受領した。groupIdは同一プロセス内で扱い、表示・ファイル・環境変数・ログ・クリップボードへ保存していない。Capture結果は`secrets_set`、`tail_stopped=true`。Webhook配送は無効化済みである。

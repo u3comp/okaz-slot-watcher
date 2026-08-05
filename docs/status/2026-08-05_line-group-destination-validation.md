@@ -27,6 +27,8 @@ Validation Commit: `1f461fa1b4cfe6c5098d8f3dc57176c5f09cc6e3`
 | Remote Probe | pass（HTTP 200、outcome正常、capture event 0、Secret write 0） |
 | Remote Capture | pass（`secrets_set`、`tail_stopped=true`、安全な5項目のみ出力） |
 | Dormant endpoint | pass（同一URL、GET 405／空body、bindings 0、Secret 0、永続ログ無効） |
+| Production candidate upload | pass（Version `fef3f4c1-d4cc-476e-ae98-51daff127df0`、traffic 0%、未Deploy） |
+| Candidate Preview `/health` | pass（HTTP 200、exact 3-key、personal、user/group configured=true） |
 
 WhatIfはGitHubユーザー完全一致、Cloudflare Account、Active Version 100%、D1 JSON（pending=0、failures=0、leaseなし）、canonical Cron記載、modeを読み取る。Wrangler 4.118にはSchedules readコマンドがないため実効Cronは取得不能として記録し、Applyはfail-closed。ApplyはHealth URLと移行段階ごとのgroup configured期待値を必須とし、HTTP JSONとadapterの双方を同じexact-schema関数で検査する。
 
@@ -41,4 +43,4 @@ WhatIfはGitHubユーザー完全一致、Cloudflare Account、Active Version 10
 
 ## External state after Capture
 
-GitHub `LINE_GROUP_ID`はconfigured。Cloudflareには`LINE_GROUP_ID`を含む未Deploy Secret Versionが1件ありtraffic 0%。Production Active Version／Deployment、mode personal、Cron、D1は不変で、Production通知は発生していない。Webhook配送は無効、Capture WorkerはDormant化され、Channel Secretは削除済み。remote push／main統合は実施していない。状態は`PRODUCTION_PERSONAL_CANDIDATE_PREPARATION_APPROVED`。
+GitHub `LINE_GROUP_ID`はconfigured。Cloudflareには`LINE_GROUP_ID`を含む未Deploy Secret VersionとProduction候補Versionが各1件あり、trafficは0%。Candidate Preview前後のD1 versionは494で不変。Production Active Version／Deployment、mode personal、Cron、D1は不変で、Production通知は発生していない。Webhook配送は無効、Capture WorkerはDormant化され、Channel Secretは削除済み。remote push／main統合／Actions実送信は未実施。状態は`PRODUCTION_CANDIDATE_VALIDATION_BLOCKED`。Blocked理由はremote mainにdestination overrideがなく、feature branchが未Pushだったため。

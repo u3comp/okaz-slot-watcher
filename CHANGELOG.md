@@ -50,3 +50,6 @@ powershell -File scripts/set-line-destination.ps1 -Mode personal -Apply -Cloudfl
 - Capture Workerは同一Webhook URLのDormant Workerへ置換済み。Channel Secret、bindings、永続ログは残していない
 - Productionの`LINE_DESTINATION_MODE`変更、候補Version Deploy、personal／group実配送E2Eは未実施
 - Production候補Versionの非Deploy検証とLINE route testはHuman承認下でPending
+- Candidate `fef3f4c1-d4cc-476e-ae98-51daff127df0`をUploadし、Preview `/health`とD1不変を確認したが、Production trafficは0%のまま
+- remote mainにdestination overrideがないため、feature branch未Push時点ではpersonal／group実送信を実施せず`PRODUCTION_CANDIDATE_VALIDATION_BLOCKED`とした
+- 次の承認範囲はfeature branchだけのpushと、branch指定`line_test`をpersonal、group各1回実施すること
