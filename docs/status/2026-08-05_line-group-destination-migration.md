@@ -1,6 +1,6 @@
-# LINE Group Destination Migration (Human Checkpoint B pending)
+# LINE Group Destination Migration (Production candidate pending)
 
-作業日時: 2026-08-05 JST（最終差戻し再検証 10:22–10:25 JST）
+作業日時: 2026-08-05 JST（Capture実環境確認・Dormant化を同日実施）
 作業ブランチ: `feat/line-destination-routing`
 修正対象の基点: `ca8e2eee9376cd1cf884ebf526b03607c8f7f608`
 
@@ -14,6 +14,15 @@
 - Production通知先はpersonalのまま維持
 - Production Artifact baseline: `PRODUCTION_BASELINE_VERIFIED`
 - Artifact comparison: `DEPLOYED_ARTIFACT_NORMALIZED_MATCH`
+- Remote Probe: `worker_invocation_seen`、HTTP 200、capture eventなし、Secret write 0
+- Capture結果: `secrets_set`、`tail_stopped=true`
+- GitHub `LINE_GROUP_ID`: configured（値は取得・記録していない）
+- Cloudflare `LINE_GROUP_ID`: 未Deploy Secret Version `fc763ea1-1c74-41b6-92d6-b42570566b3c`、Production traffic 0%
+- Dormant Worker Active Version: `de73b291-257c-470f-8b0a-690bda425315`
+- Dormant Worker Deployment: `2fb48bc8-8cbc-467f-9446-f086d62f49d5`
+- Webhook endpointは保持、Webhook配送は無効、Capture Channel Secretは削除済み
+- Dormant bindings 0、永続ログ無効、Capture／Tail残存プロセス0
+- groupId value logged: false、Production通知送信なし
 
 ## Implemented locally
 
@@ -37,14 +46,16 @@
 - PowerShell switch-script syntax、personal WhatIf read-only preflight、個別関数failure-injection passed（Apply全体E2Eではない）
 - fixture分類付きsecret scan、LINE ID、absolute-path scanを実施
 
+## Completed externally under Human approval
+
+- Capture WorkerのUpload／Deploy、Remote Probe、groupId Capture
+- GitHub `LINE_GROUP_ID`登録とCloudflare未Deploy Secret Version作成
+- Webhook URL登録／検証、Capture中の一時配送有効化、取得直後の配送無効化
+- Dormant Workerへの置換とCapture Channel Secret削除
+
 ## Not performed
 
-- LINE_GROUP_ID Secretの登録
-- LINE_DESTINATION_MODE Variableの作成・変更
-- Capture WorkerのUpload／Deploy
-- Webhook URL登録・検証・配送有効化
-- groupId取得
-- Dormant Workerへの置換
+- `LINE_DESTINATION_MODE`のProduction設定変更
 - personal／group実配送E2E
 - Production切替
 - remote push、main統合
@@ -55,4 +66,4 @@
 
 ## Status
 
-`HUMAN_CHECKPOINT_B_CAPTURE_READY_REVIEW_PENDING`
+`PRODUCTION_PERSONAL_CANDIDATE_PREPARATION_APPROVED`

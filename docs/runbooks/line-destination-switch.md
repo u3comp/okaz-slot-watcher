@@ -1,11 +1,11 @@
-# LINE通知先切替Runbook（Human Checkpoint B pending）
+# LINE通知先切替Runbook（Production candidate pending）
 
 最終更新: 2026-08-05 JST
 
 ## 構成
 
 - `LINE_USER_ID`: 既存の個人宛先Secret。削除・改名・上書きしない。
-- `LINE_GROUP_ID`: グループ宛先Secret。Human Checkpoint B後に追加する。
+- `LINE_GROUP_ID`: グループ宛先Secret。GitHubへ登録済み。Cloudflareでは未Deploy Secret Versionにのみ存在し、Production trafficは0%。
 - `LINE_DESTINATION_MODE`: `personal` または `group`。未設定は `personal`。
 - GitHub Actionsの通常監視は `LINE_TEST_DESTINATION` を無視し、Repository Variableだけを使う。
 - `line_test`だけが `configured` / `personal` / `group` の手動overrideを受け付ける。
@@ -51,9 +51,11 @@ Cloudflare Versionの承認済みIDがない場合は、推測でDeployせずHum
 
 ## Capture／Dormant
 
-Capture WorkerはHuman Checkpoint BまでDeployしない。Webhook URL登録後は送信前に`wrangler tail`を開始し、署名検証済みgroupイベントの専用イベントをローカルOrchestratorが1件だけ受ける。groupIdは同一プロセスの標準入力へ直接渡し、表示・ファイル・環境変数・ログ・クリップボードへ保存しない。Worker isolateのSetによる重複抑止はbest effortであり、Orchestrator受領が正式停止条件。取得後は直ちにtail停止、Webhook配送停止、Dormant化へ進む。
+Capture Phaseは2026-08-05 JSTに完了した。Remote ProbeでHTTP 200、Worker outcome正常、capture eventなしを確認後、署名検証済みgroupイベントの専用イベントをローカルOrchestratorが1件だけ受領した。groupIdは同一プロセス内で扱い、表示・ファイル・環境変数・ログ・クリップボードへ保存していない。Capture結果は`secrets_set`、`tail_stopped=true`。Webhook配送は無効化済みである。
 
-実行ファイルは `cloudflare-worker/capture-worker/capture-group-id.mjs`。通常は`npm run capture:group-id`（captureのみ）、Secret設定を伴う場合だけ人間承認後に`node capture-worker/capture-group-id.mjs --apply`を使用する。CLIはproject-local Wranglerを直接起動し、Secret値を引数・出力・ファイルへ渡さない。Cloudflare側の既存名は`wrangler secret list --format json`で確認し、Secret作成前後の`wrangler versions list --json`を一意な非秘密tag/messageで照合する。新Versionを一意に確認できない場合はGitHub側だけを1回削除し、`partial_cloudflare_secret_version_unverified`として人間判断へ戻る。Production Deployは行わない。
+実行ファイルは `cloudflare-worker/capture-worker/capture-group-id.mjs`。Probeは`node capture-worker/capture-group-id.mjs --probe --timeout-seconds 120`、Captureは人間承認後に`node capture-worker/capture-group-id.mjs --apply --timeout-seconds 600`を使用する。CLIはproject-local Wranglerを直接起動し、Secret値を引数・出力・ファイルへ渡さない。Cloudflare側の既存名は`wrangler secret list --format json`で確認し、Secret作成前後の`wrangler versions list --json`を一意な非秘密tag/messageで照合する。新Versionを一意に確認できない場合はGitHub側だけを1回削除し、`partial_cloudflare_secret_version_unverified`として人間判断へ戻る。Production Deployは行わない。
+
+Capture後、同一endpointはDormant Workerへ置換済みである。Dormant WorkerはPOST 200／その他405、bindings 0、Secret 0、Cron 0、永続ログ無効。Webhook URLは保持し、LINE DevelopersのWebhook配送は無効のまま維持する。Production通知先切替のためにWebhook配送を再有効化してはならない。
 
 ## 秘密情報の取扱い
 

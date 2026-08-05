@@ -30,7 +30,8 @@
 - Capture Workerはraw bodyの署名を検証し、専用tailイベント以外へgroupIdを出さない。OrchestratorはIDを表示・永続化せず標準入力コールバックへ渡す
 - Worker isolateのduplicate suppressionはbest effortであり、Orchestratorの1件受領が正式停止条件
 - Dormant sinkはPOST bodyを読まず、外部通信・永続ログ・Secret・Cron・Bindingを持たない
-- Productionモード、Webhook、Secret、Cron、D1はこのPending作業で変更しない
+- Production Worker、Productionモード、Cron、D1は変更していない。Capture中だけWebhook配送を有効化し、取得後は無効化した
+- groupId実値は表示・永続化せず、GitHub SecretとCloudflare未Deploy Secret Versionへstdin経由で登録した
 
 ### Rollback
 
@@ -44,8 +45,8 @@ powershell -File scripts/set-line-destination.ps1 -Mode personal -Apply -Cloudfl
 
 ### Pending
 
-- LINE DevelopersのWebhook URL登録、検証、配送有効化は未実施
-- Capture WorkerのDeploy、Secret登録、groupId取得は未実施
-- LINE_GROUP_ID Secret追加、LINE_DESTINATION_MODE変更は未実施
-- personal／groupの実配送E2EとProduction切替はHuman Checkpoint B以降
-- Human Checkpoint Bは差戻し修正後も未承認（`HUMAN_CHECKPOINT_B_REVIEW_PENDING`）
+- Captureは`secrets_set`、`tail_stopped=true`で完了し、Webhook配送は無効化済み
+- GitHub `LINE_GROUP_ID`とCloudflare未Deploy Secret Versionは作成済み。Production trafficは0%で、Active Version／Deploymentは不変
+- Capture Workerは同一Webhook URLのDormant Workerへ置換済み。Channel Secret、bindings、永続ログは残していない
+- Productionの`LINE_DESTINATION_MODE`変更、候補Version Deploy、personal／group実配送E2Eは未実施
+- Production候補Versionの非Deploy検証とLINE route testはHuman承認下でPending
