@@ -21,6 +21,9 @@ def test_launcher_uses_one_process_token_lifecycle_and_fail_closed_gates():
         "child_token_inherited = $childTokenInherited",
         "failure_phase = $failurePhase",
         "effective_cron_unverified",
+        "cloudflare-worker\\node_modules\\.bin",
+        "project_cli_path_configured = $projectCliPathConfigured",
+        "wrangler_cli_unavailable",
     ):
         assert marker in text
 

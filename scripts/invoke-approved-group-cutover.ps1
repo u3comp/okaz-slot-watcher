@@ -16,6 +16,7 @@ $productionHealth = 'https://okaz-slot-watcher-cf.u3comp.workers.dev/health'
 $groupHealth = "https://$GroupVersionId-okaz-slot-watcher-cf.u3comp.workers.dev/health"
 $personalHealth = "https://$PersonalVersionId-okaz-slot-watcher-cf.u3comp.workers.dev/health"
 $tokenName = 'OKAZ_CF_SCHEDULES_READ_TOKEN'
+$projectBin = Join-Path $repoRoot 'cloudflare-worker\node_modules\.bin'
 $status = 'failed'
 $failureClass = $null
 $groupWhatIf = $false
@@ -24,6 +25,7 @@ $applyPassed = $false
 $tokenCleared = $false
 $childTokenInherited = $false
 $failurePhase = 'initialization'
+$projectCliPathConfigured = $false
 
 function Invoke-GatedSwitch {
     param(
@@ -57,6 +59,8 @@ function Invoke-GatedSwitch {
     if ($exitCode -ne 0) {
         $combined = $output -join [Environment]::NewLine
         if ($combined -match 'effective Cron could not be verified') { throw 'effective_cron_unverified' }
+        if ($combined -match 'wrangler CLI is not available') { throw 'wrangler_cli_unavailable' }
+        if ($combined -match 'gh CLI is not available') { throw 'gh_cli_unavailable' }
         if ($combined -match 'GitHub and Cloudflare destination modes differ') { throw 'destination_mode_mismatch' }
         if ($combined -match 'health') { throw 'health_gate_failed' }
         if ($combined -match 'D1') { throw 'd1_gate_failed' }
@@ -66,6 +70,11 @@ function Invoke-GatedSwitch {
 
 try {
     Set-Location $repoRoot
+    if (-not (Test-Path -LiteralPath (Join-Path $projectBin 'wrangler.cmd'))) {
+        throw 'project_wrangler_missing'
+    }
+    $env:Path = "$projectBin;$env:Path"
+    $projectCliPathConfigured = $true
     if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($tokenName, 'Process'))) {
         $secureToken = Read-Host 'Cloudflare schedules read Tokenを貼り付けてEnter' -AsSecureString
         $tokenPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureToken)
@@ -107,7 +116,7 @@ try {
         'schedules_token_missing'
     } elseif ($_.Exception.Message -eq 'child_token_not_inherited') {
         'child_token_not_inherited'
-    } elseif ($_.Exception.Message -in @('effective_cron_unverified', 'destination_mode_mismatch', 'health_gate_failed', 'd1_gate_failed')) {
+    } elseif ($_.Exception.Message -in @('effective_cron_unverified', 'destination_mode_mismatch', 'health_gate_failed', 'd1_gate_failed', 'wrangler_cli_unavailable', 'gh_cli_unavailable', 'project_wrangler_missing')) {
         $_.Exception.Message
     } else {
         'gated_switch_failed'
@@ -123,6 +132,7 @@ try {
         apply = $applyPassed
         child_token_inherited = $childTokenInherited
         failure_phase = $failurePhase
+        project_cli_path_configured = $projectCliPathConfigured
         token_value_logged = $false
         token_cleared = $tokenCleared
         completed_at_jst = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow, 'Tokyo Standard Time').ToString('yyyy-MM-ddTHH:mm:sszzz')
