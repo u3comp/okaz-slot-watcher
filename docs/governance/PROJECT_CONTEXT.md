@@ -166,7 +166,7 @@
 
 - Cloudflareの現在Active Version、実効Cron、D1、Secret binding、LINE destination mode。
 - GitHub `WATCHER_ENABLED` / `LINE_DESTINATION_MODE` の現在値と、自然なscheduleの現在の発火状態。
-- Capture CLIのWrangler capabilityテストが5秒timeoutした原因と、次回実行時の再現性。今回のBootstrapではコード修正や再試行を行っていない。
+- `KNOWN_VALIDATION_LIMITATION_CAPTURE_CLI_WRANGLER_TIMEOUT`: Capture CLIのWrangler capabilityテストが5秒timeoutした原因と、次回実行時の再現性。今回のBootstrapではコード修正や再試行を行っていない。
 - CloudflareとGitHubが同時にProduction通知しているか、また重複抑止が外部経路間でも成立するか。
 - 実際のキャンセル復活時にEcwid応答が4枠すべて期待どおりに変化するか。
 - cutoff後にCloudflareとGitHubの両経路が確実に停止・休眠化するか。
