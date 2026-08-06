@@ -6,12 +6,12 @@
 - Environment: `SECONDARY_PC`
 - Authority: `NON_AUTHORITATIVE`
 - Repository Path: `C:\Users\user01\Desktop\repo-Yggdrasill\ai-tools-private\tools\okaz-slot-watcher`
-- Branch: `feat/line-destination-routing`
-- HEAD at review start: `0fb110160fbba8fef548677d6a8fb31c87250a53`
+- Branch: `main`
+- HEAD at review start: `864b987dfec816413fe1d231f959fdca46193332`
 - Remote: `https://github.com/u3comp/okaz-slot-watcher.git`
 - Working Tree State: tracked変更0件、untracked 8件。既存のdirty状態を維持
-- Last Reviewed At: `2026-08-06T20:11:43+09:00` (Asia/Tokyo)
-- Evidence Scope: Repository内の実装・Git履歴・文書・テスト・設定、および必要最小限のArchive。外部環境は未接続
+- Last Reviewed At: `2026-08-06T21:50:37+09:00` (Asia/Tokyo)
+- Evidence Scope: Repository内の実装・Git履歴・文書・テスト・設定、およびCloudflare Productionの読み取り確認とControlled CUJ証跡
 
 ## 1. Purpose
 
@@ -122,21 +122,21 @@
 - Confirmed Steps: Controlled通知E2E、group route health、D1正常、5 Round設計。
 - Inferred Steps: 実際のキャンセル発生から購入開始までの利用者行動。
 - Untested Boundary: 実サイトが本当にSOLD_OUTからAVAILABLEへ変化した瞬間の完全なProduction CUJ。
-- Current Acceptance State: `OPERATIONAL_ACCEPTANCE_PENDING`。
+- Current Acceptance State: `CONTROLLED_PRODUCTION_CUJ_ACCEPTANCE_COMPLETE`。Human receipt、URL navigation、5 Round完了、6 Round目なしを確認済み。自然なSOLD_OUT→AVAILABLE遷移は別境界として未観測。
 
 ## 7. Current State
 
-- Production Active: Repository内の2026-08-05証跡ではCloudflare Group Candidateが100%、health=group、毎分Cron、D1正常。
+- Production Active: Cloudflare Version `1795c1d6-ce9e-4e71-9edf-c4cdd8b0c88e` が100%（Deployment `95587214-3554-4e14-a907-5b365a35dd6d`）。health=group、毎分Cron、D1正常。
 - Implementation Verified: Cloudflare・Python・PowerShellの実装とローカルテストがRepositoryに存在する。
-- Controlled Production E2E Verified: Personal / GroupのLINE test、およびURL付き通知・5 RoundのControlled E2Eが証跡に記録されている。
+- Controlled Production E2E Verified: URL付き通知をDiscord 5件、LINE 5件でHuman確認。対象URL navigation成功、重複なし、6 Round目なし。Acceptance Harnessは最終Versionで無効化済み。
 - Governance: `GOVERNANCE_BOOTSTRAP_ACCEPTED`
-- Operational Acceptance: `OPERATIONAL_ACCEPTANCE_WAIVED_FOR_CURRENT_CAMPAIGN`
+- Operational Acceptance: `CONTROLLED_PRODUCTION_CUJ_ACCEPTANCE_COMPLETE`
 - GitHub Schedule: `UNCHANGED_NOT_REPAIRED`
 - Production: `CLOUDFLARE_MONITORING_CONTINUES_UNCHANGED`
 - Governance Profile: `QUALITY_PRESERVED_SCRATCH`
 - Next Governance Promotion: `AT_NEXT_CAMPAIGN_REUSE_REVIEW`
-- Pending Investigation: Cloudflare Productionの最新Version、実効Cron、GitHub自然schedule、Cloudflare/GitHub同時通知の有無。
-- Deferred: 実際の状態変化から5 Round配送までの完全CUJ証明、休眠化時のGitHub schedule整理、次回再利用時のLITE昇格判定。
+- Pending Investigation: 実際のキャンセル復活による自然なSOLD_OUT→AVAILABLE遷移。GitHub自然scheduleとCloudflare/GitHub同時通知の設計リスクは別管理。
+- Deferred: 実際の自然状態変化から5 Round配送までの完全CUJ証明、休眠化時のGitHub schedule整理、次回再利用時のLITE昇格判定。
 - Hibernate予定: cutoff後の停止・休眠化。今回変更しない。
 - Path Normalization Complete: 新Repository配置とArchive移動は2026-08-05に完了。
 
