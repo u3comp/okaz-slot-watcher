@@ -58,6 +58,7 @@ export type Pending = {
   kind: string;
   message: string;
   channels: ChannelState;
+  test_id?: string;
   repeat?: {
     series_id: string;
     sequence: number;
@@ -121,8 +122,16 @@ export type State = {
   last_redirect_status?: number;
   last_redirect_location_present?: boolean;
   last_redirect_host?: string;
+  acceptance?: {
+    test_id: string;
+    phase: "baseline" | "available" | "complete";
+    observed_at_utc?: string;
+    series_id?: string;
+    completed_sequences: number[];
+  };
 };
 type StateRecord = { state: State; version: number };
+type AcceptanceRecord = StateRecord & { testId: string };
 
 export interface Env {
   DB: D1Database;
@@ -134,6 +143,8 @@ export interface Env {
   LINE_CHANNEL_ACCESS_TOKEN?: string;
   LINE_USER_ID?: string;
   LINE_GROUP_ID?: string;
+  ACCEPTANCE_HARNESS_ENABLED?: string;
+  ACCEPTANCE_HARNESS_TOKEN?: string;
 }
 
 export type LineDestinationMode = "personal" | "group";
@@ -214,6 +225,77 @@ export async function saveState(db: D1Database, state: State, expectedVersion: n
   return expectedVersion + 1;
 }
 
+const ACCEPTANCE_TEST_ID_PATTERN = /^CF-CUJ-[A-Za-z0-9][A-Za-z0-9-]{7,95}$/;
+const ACCEPTANCE_SLOT_KEY = "acceptance-test";
+const ACCEPTANCE_SLOT_LABEL = "Acceptance Test Slot";
+
+function validAcceptanceTestId(value: unknown): value is string {
+  return typeof value === "string" && ACCEPTANCE_TEST_ID_PATTERN.test(value);
+}
+
+function acceptanceDefaultState(testId: string, at = new Date()): State {
+  return {
+    schema_version: 2,
+    slots: { [ACCEPTANCE_SLOT_KEY]: { label: ACCEPTANCE_SLOT_LABEL, status: "SOLD_OUT" } },
+    consecutive_total_failures: 0,
+    outage_notified: false,
+    pending_notifications: [],
+    updated_at_jst: nowJst(at),
+    acceptance: { test_id: testId, phase: "baseline", completed_sequences: [] },
+  };
+}
+
+async function loadAcceptance(db: D1Database, testId: string): Promise<AcceptanceRecord | null> {
+  const row = await db.prepare(
+    "SELECT test_id, state_json, version FROM acceptance_state WHERE test_id = ? AND active = 1",
+  ).bind(testId).first<{ test_id: string; state_json: string; version: number }>();
+  if (!row) return null;
+  try {
+    const state = JSON.parse(row.state_json) as State;
+    if (state.schema_version !== 2 || !state.acceptance || state.acceptance.test_id !== testId) return null;
+    return { testId, state, version: row.version };
+  } catch {
+    return null;
+  }
+}
+
+async function loadActiveAcceptances(db: D1Database): Promise<AcceptanceRecord[]> {
+  const result = await db.prepare(
+    "SELECT test_id, state_json, version FROM acceptance_state WHERE active = 1 ORDER BY created_at_utc",
+  ).all<{ test_id: string; state_json: string; version: number }>();
+  const records: AcceptanceRecord[] = [];
+  for (const row of result.results ?? []) {
+    try {
+      const state = JSON.parse(row.state_json) as State;
+      if (state.schema_version === 2 && state.acceptance?.test_id === row.test_id) {
+        records.push({ testId: row.test_id, state, version: row.version });
+      }
+    } catch {
+      // Invalid acceptance rows are ignored without touching canonical state.
+    }
+  }
+  return records;
+}
+
+async function createAcceptance(db: D1Database, testId: string, at = new Date()): Promise<void> {
+  const state = acceptanceDefaultState(testId, at);
+  const encoded = JSON.stringify(state);
+  const timestamp = at.toISOString();
+  const result = await db.prepare(
+    "INSERT INTO acceptance_state (test_id, state_json, version, active, created_at_utc, updated_at_utc) VALUES (?, ?, 0, 1, ?, ?)",
+  ).bind(testId, encoded, timestamp, timestamp).run();
+  if ((result.meta.changes ?? 0) !== 1) throw new Error("acceptance_state_create_failed");
+}
+
+async function saveAcceptance(db: D1Database, record: AcceptanceRecord, at = new Date()): Promise<number> {
+  const encoded = JSON.stringify(record.state);
+  const result = await db.prepare(
+    "UPDATE acceptance_state SET state_json = ?, version = version + 1, updated_at_utc = ? WHERE test_id = ? AND active = 1 AND version = ?",
+  ).bind(encoded, at.toISOString(), record.testId, record.version).run();
+  if ((result.meta.changes ?? 0) !== 1) throw new Error("acceptance_state_version_conflict");
+  return record.version + 1;
+}
+
 export async function acquireLease(db: D1Database, owner: string): Promise<boolean> {
   const now = Date.now();
   const until = now + LOCK_LEASE_MS;
@@ -288,6 +370,45 @@ export function classifyFetchError(error: unknown): {
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function secretMatches(provided: string, expected: string): Promise<boolean> {
+  if (!provided || !expected) return false;
+  const [providedHash, expectedHash] = await Promise.all([sha256Hex(provided), sha256Hex(expected)]);
+  if (providedHash.length !== expectedHash.length) return false;
+  let difference = 0;
+  for (let index = 0; index < providedHash.length; index += 1) {
+    difference |= providedHash.charCodeAt(index) ^ expectedHash.charCodeAt(index);
+  }
+  return difference === 0;
+}
+
+async function readRequestBody(request: Request, maxBytes = 8 * 1024): Promise<string> {
+  const reader = request.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new Error("request_body_too_large");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(body);
 }
 
 async function readLimitedText(response: Response): Promise<{ text: string; truncated: boolean }> {
@@ -567,7 +688,7 @@ export function enqueueSingleNotification(
   if (dryRun) dryEvents.push(item); else state.pending_notifications.push(item);
 }
 
-export function enqueueAvailabilitySeries(
+function enqueueSeries(
   state: State,
   labels: string,
   detectedAt: Date,
@@ -575,7 +696,9 @@ export function enqueueAvailabilitySeries(
   lineEnabled: boolean,
   dryRun: boolean,
   dryEvents: Pending[],
-): void {
+  messageFor: (sequence: number, total: number) => string,
+  testId?: string,
+): string {
   const total = 5;
   const seriesId = crypto.randomUUID();
   const detectedAtUtc = detectedAt.toISOString();
@@ -584,8 +707,9 @@ export function enqueueAvailabilitySeries(
     const item: Pending = {
       id: crypto.randomUUID(),
       kind: "available",
-      message: buildAvailabilityMessage(sequence, total, labels, detectedAt, targetUrl),
+      message: messageFor(sequence, total),
       channels: lineEnabled ? { discord: false, line: false } : { discord: false },
+      ...(testId ? { test_id: testId } : {}),
       repeat: {
         series_id: seriesId,
         sequence,
@@ -601,6 +725,54 @@ export function enqueueAvailabilitySeries(
     };
     if (dryRun) dryEvents.push(item); else state.pending_notifications.push(item);
   }
+  return seriesId;
+}
+
+export function enqueueAvailabilitySeries(
+  state: State,
+  labels: string,
+  detectedAt: Date,
+  targetUrl: string,
+  lineEnabled: boolean,
+  dryRun: boolean,
+  dryEvents: Pending[],
+): void {
+  enqueueSeries(
+    state, labels, detectedAt, targetUrl, lineEnabled, dryRun, dryEvents,
+    (sequence, total) => buildAvailabilityMessage(sequence, total, labels, detectedAt, targetUrl),
+  );
+}
+
+export function buildAcceptanceAvailabilityMessage(
+  sequence: number,
+  total: number,
+  testId: string,
+  detectedAt: Date,
+  targetUrl: string,
+): string {
+  return [
+    "【本番想定テスト・実際の空き枠ではありません】",
+    `【空き枠復活テスト ${sequence}/${total}】`,
+    `Test ID: ${testId}`,
+    `対象枠: ${ACCEPTANCE_SLOT_LABEL}`,
+    `検知時刻: ${nowJst(detectedAt)}`,
+    "本番通知で使用する購入ページ:",
+    targetUrl,
+  ].join("\n");
+}
+
+export function enqueueAcceptanceSeries(
+  state: State,
+  testId: string,
+  detectedAt: Date,
+  targetUrl: string,
+  lineEnabled: boolean,
+): string {
+  return enqueueSeries(
+    state, ACCEPTANCE_SLOT_LABEL, detectedAt, targetUrl, lineEnabled, false, [],
+    (sequence, total) => buildAcceptanceAvailabilityMessage(sequence, total, testId, detectedAt, targetUrl),
+    testId,
+  );
 }
 
 async function recordDryRunEvents(db: D1Database, events: Pending[], observedAt: Date): Promise<void> {
@@ -906,6 +1078,128 @@ export async function deliverPending(
   return before !== JSON.stringify(state);
 }
 
+async function deliverAcceptancePending(env: Env, scheduledAt: Date): Promise<boolean> {
+  if (env.ACCEPTANCE_HARNESS_ENABLED !== "true" || env.DRY_RUN !== "false") return false;
+  let records: AcceptanceRecord[];
+  try {
+    records = await loadActiveAcceptances(env.DB);
+  } catch {
+    console.log("acceptance_state_unavailable");
+    return false;
+  }
+  let changed = false;
+  for (const record of records) {
+    const beforePending = [...record.state.pending_notifications];
+    const deliveryChanged = await deliverPending(env, record.state, true, scheduledAt);
+    const remainingIds = new Set(record.state.pending_notifications.map((item) => item.id));
+    const completed = beforePending
+      .filter((item) => item.repeat && !remainingIds.has(item.id))
+      .map((item) => item.repeat!.sequence);
+    if (completed.length) {
+      const existing = new Set(record.state.acceptance?.completed_sequences ?? []);
+      for (const sequence of completed) existing.add(sequence);
+      record.state.acceptance!.completed_sequences = [...existing].sort((a, b) => a - b);
+    }
+    if (
+      record.state.acceptance?.phase === "available"
+      && record.state.pending_notifications.length === 0
+      && (record.state.acceptance.completed_sequences ?? []).length === 5
+    ) {
+      record.state.acceptance.phase = "complete";
+    }
+    const phaseChanged = record.state.acceptance?.phase === "available"
+      && record.state.pending_notifications.length === 0
+      && (record.state.acceptance.completed_sequences ?? []).length === 5;
+    const stateChanged = deliveryChanged || completed.length > 0 || phaseChanged;
+    if (stateChanged) {
+      try {
+        record.version = await saveAcceptance(env.DB, record, scheduledAt);
+        changed = true;
+      } catch {
+        console.log("acceptance_state_version_conflict");
+      }
+    }
+  }
+  return changed;
+}
+
+function jsonResponse(body: Record<string, unknown>, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json; charset=utf-8" },
+  });
+}
+
+async function acceptanceRequest(request: Request, env: Env, pathname: string): Promise<Response> {
+  if (env.ACCEPTANCE_HARNESS_ENABLED !== "true") return new Response("not found", { status: 404 });
+  if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
+  if (!env.ACCEPTANCE_HARNESS_TOKEN) return new Response("acceptance harness unavailable", { status: 503 });
+  const authorization = request.headers.get("authorization") ?? "";
+  const providedToken = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  if (!(await secretMatches(providedToken, env.ACCEPTANCE_HARNESS_TOKEN))) {
+    return new Response("unauthorized", { status: 401 });
+  }
+  let payload: Record<string, unknown>;
+  try {
+    const raw = await readRequestBody(request);
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid_payload");
+    payload = parsed as Record<string, unknown>;
+  } catch (error) {
+    return new Response(error instanceof Error && error.message === "request_body_too_large" ? "payload too large" : "invalid json", {
+      status: error instanceof Error && error.message === "request_body_too_large" ? 413 : 400,
+    });
+  }
+  const allowedKeys = pathname.endsWith("/start") ? ["test_id"] : ["test_id", "status", "slot_label"];
+  if (Object.keys(payload).some((key) => !allowedKeys.includes(key))) return new Response("invalid payload", { status: 400 });
+  const testId = payload.test_id;
+  if (!validAcceptanceTestId(testId)) return new Response("invalid test id", { status: 400 });
+  if (pathname.endsWith("/observe") && (payload.status !== "AVAILABLE" || payload.slot_label !== ACCEPTANCE_SLOT_LABEL)) {
+    return new Response("invalid observation", { status: 400 });
+  }
+  if (!validateTargetPageUrl(env.TARGET_PAGE_URL) || env.LINE_ENABLED !== "true" || env.DRY_RUN !== "false") {
+    return new Response("acceptance harness not ready", { status: 409 });
+  }
+
+  const owner = crypto.randomUUID();
+  let locked = false;
+  try {
+    locked = await acquireLease(env.DB, owner);
+    if (!locked) return new Response("busy", { status: 409 });
+    const canonical = await loadState(env.DB);
+    if (canonical.state.pending_notifications.length || canonical.state.consecutive_total_failures !== 0 || canonical.state.outage_notified) {
+      return new Response("canonical state not ready", { status: 409 });
+    }
+    if (pathname.endsWith("/start")) {
+      if (await loadAcceptance(env.DB, testId)) return new Response("test id already exists", { status: 409 });
+      await createAcceptance(env.DB, testId);
+      return jsonResponse({ accepted: true, phase: "baseline", test_id: testId }, 201);
+    }
+    const record = await loadAcceptance(env.DB, testId);
+    if (!record) return new Response("test id not found", { status: 404 });
+    if (record.state.acceptance?.phase !== "baseline") {
+      return jsonResponse({ accepted: false, idempotent: true, phase: record.state.acceptance?.phase, test_id: testId });
+    }
+    const observedAt = new Date();
+    const seriesId = enqueueAcceptanceSeries(record.state, testId, observedAt, env.TARGET_PAGE_URL!, true);
+    record.state.slots[ACCEPTANCE_SLOT_KEY] = { label: ACCEPTANCE_SLOT_LABEL, status: "AVAILABLE" };
+    record.state.acceptance = {
+      ...record.state.acceptance,
+      phase: "available",
+      observed_at_utc: observedAt.toISOString(),
+      series_id: seriesId,
+      completed_sequences: [],
+    };
+    await saveAcceptance(env.DB, record, observedAt);
+    return jsonResponse({ accepted: true, phase: "available", test_id: testId, series_id: seriesId, pending_count: 5 });
+  } catch (error) {
+    if (error instanceof Error && error.message === "acceptance_state_version_conflict") return new Response("state conflict", { status: 409 });
+    return new Response("acceptance storage failure", { status: 503 });
+  } finally {
+    if (locked) { try { await releaseLease(env.DB, owner); } catch { console.log("lock_release_failed"); } }
+  }
+}
+
 function validateStartup(env: Env): boolean {
   if (!validateTargetPageUrl(env.TARGET_PAGE_URL)) {
     console.log("target_page_url_invalid");
@@ -965,6 +1259,7 @@ export async function runOnce(env: Env, at = new Date()): Promise<void> {
     const dryRun = env.DRY_RUN !== "false";
     const lineEnabled = env.LINE_ENABLED === "true";
     const targetUrl = env.TARGET_PAGE_URL!;
+    if (!dryRun) await deliverAcceptancePending(env, observedAt);
     const observationDue = at.getUTCMinutes() % 5 === 0;
     if (!observationDue) {
       if (!dryRun) {
@@ -1032,6 +1327,9 @@ export default {
   },
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === "/__acceptance/start" || url.pathname === "/__acceptance/observe") {
+      return acceptanceRequest(request, env, url.pathname);
+    }
     if (request.method === "GET" && url.pathname === "/health") {
       return new Response(JSON.stringify(lineDestinationStatus(env)), {
         status: 200,

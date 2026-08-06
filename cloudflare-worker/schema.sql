@@ -17,3 +17,14 @@ CREATE TABLE IF NOT EXISTS dry_run_events (
   message TEXT NOT NULL,
   created_at_jst TEXT NOT NULL
 );
+
+-- Isolated, opt-in acceptance state. This table is never used by normal
+-- monitoring and contains no canonical watcher state or credentials.
+CREATE TABLE IF NOT EXISTS acceptance_state (
+  test_id TEXT PRIMARY KEY,
+  state_json TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+  created_at_utc TEXT NOT NULL,
+  updated_at_utc TEXT NOT NULL
+);

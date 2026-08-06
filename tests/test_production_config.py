@@ -14,7 +14,7 @@ def test_production_config_is_canonical_and_secret_free():
     assert d1["database_id"] == "04c229e8-a76b-40a8-a4b4-17c78bdcf6ff"
     assert config["vars"]["DRY_RUN"] == "false"
     assert config["vars"]["LINE_ENABLED"] == "true"
-    assert config["vars"]["LINE_DESTINATION_MODE"] == "personal"
+    assert config["vars"]["LINE_DESTINATION_MODE"] == "group"
     text = path.read_text(encoding="utf-8")
     assert "DISCORD_WEBHOOK_URL =" not in text
     assert "LINE_CHANNEL_ACCESS_TOKEN =" not in text

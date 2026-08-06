@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   acquireLease,
   buildAvailabilityMessage,
+  buildAcceptanceAvailabilityMessage,
   buildOutageMessage,
   buildRecoveredMessage,
   classifyFetchError,
@@ -12,7 +13,10 @@ import {
   SLOTS,
   statusFromResponse,
   validateTargetPageUrl,
+  enqueueAcceptanceSeries,
+  type State,
 } from "../src/index";
+import worker from "../src/index";
 
 const jsonHeaders = { "content-type": "application/json" };
 const TARGET_PAGE_URL = "https://shop.okaz-design.jp/store/%E8%8C%A8%E3%81%A8%E6%9E%9C%E5%AE%9F-p850942259";
@@ -496,5 +500,144 @@ describe("LINE_ENABLED契約", () => {
     await runOnce({ DB: fake.db, DRY_RUN: "false", TARGET_PAGE_URL, LINE_ENABLED: "true" }, new Date("2026-08-03T11:00:00.000Z"));
     expect(fetchMock).not.toHaveBeenCalled();
     expect(fake.getVersion()).toBe(0);
+  });
+});
+
+describe("隔離Acceptance Harness", () => {
+  function acceptanceDb() {
+    const canonical = testState("SOLD_OUT");
+    let canonicalVersion = 12;
+    let lockOwner = "";
+    const acceptances = new Map<string, { state_json: string; version: number; active: number }>();
+    const db = {
+      prepare(sql: string) {
+        return {
+          async first() {
+            if (sql.startsWith("SELECT state_json")) return { state_json: JSON.stringify(canonical), version: canonicalVersion };
+            if (sql.startsWith("SELECT test_id, state_json")) {
+              const testId = String((this as unknown as { args?: unknown[] }).args?.[0] ?? "");
+              const row = acceptances.get(testId);
+              return row && row.active === 1 ? { test_id: testId, state_json: row.state_json, version: row.version } : null;
+            }
+            return null;
+          },
+          async all() {
+            return {
+              results: [...acceptances.entries()]
+                .filter(([, row]) => row.active === 1)
+                .map(([test_id, row]) => ({ test_id, state_json: row.state_json, version: row.version })),
+            };
+          },
+          bind(...args: unknown[]) {
+            return {
+              async first() {
+                if (sql.startsWith("SELECT test_id, state_json")) {
+                  const testId = String(args[0]);
+                  const row = acceptances.get(testId);
+                  return row && row.active === 1 ? { test_id: testId, state_json: row.state_json, version: row.version } : null;
+                }
+                return null;
+              },
+              async run() {
+                if (sql.startsWith("INSERT OR IGNORE INTO watcher_lock")) return { meta: { changes: lockOwner ? 0 : (lockOwner = String(args[0]), 1) } };
+                if (sql.startsWith("UPDATE watcher_lock SET owner")) return { meta: { changes: lockOwner === String(args[3]) || !lockOwner ? (lockOwner = String(args[0]), 1) : 0 } };
+                if (sql.startsWith("UPDATE watcher_lock SET lease_until_ms = 0")) { lockOwner = ""; return { meta: { changes: 1 } }; }
+                if (sql.startsWith("INSERT INTO acceptance_state")) {
+                  const testId = String(args[0]);
+                  if (acceptances.has(testId)) return { meta: { changes: 0 } };
+                  acceptances.set(testId, { state_json: String(args[1]), version: 0, active: 1 });
+                  return { meta: { changes: 1 } };
+                }
+                if (sql.startsWith("UPDATE acceptance_state")) {
+                  const testId = String(args[2]);
+                  const row = acceptances.get(testId);
+                  if (!row || row.version !== Number(args[3])) return { meta: { changes: 0 } };
+                  row.state_json = String(args[0]);
+                  row.version += 1;
+                  return { meta: { changes: 1 } };
+                }
+                return { meta: { changes: 0 } };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+    return { db, canonical, getCanonicalVersion: () => canonicalVersion, acceptances };
+  }
+
+  it("同じ5連生成器でURL/Test ID付き通知を隔離状態へ作成できる", () => {
+    const state = testState("SOLD_OUT") as State;
+    const testId = "CF-CUJ-20260806-isolation";
+    const seriesId = enqueueAcceptanceSeries(state, testId, new Date("2026-08-06T11:00:00.000Z"), TARGET_PAGE_URL, true);
+    expect(seriesId).toEqual(expect.any(String));
+    expect(state.pending_notifications).toHaveLength(5);
+    expect(state.pending_notifications.every((item) => item.test_id === testId)).toBe(true);
+    expect(state.pending_notifications.every((item) => item.message.includes("本番想定テスト") && item.message.includes(TARGET_PAGE_URL))).toBe(true);
+    expect(state.pending_notifications.map((item) => item.repeat?.sequence)).toEqual([1, 2, 3, 4, 5]);
+    expect(new Set(state.pending_notifications.map((item) => item.line_retry_key)).size).toBe(5);
+  });
+
+  it("start/observeはcanonical watcher_stateを変更せずacceptance_stateだけを作る", async () => {
+    const fake = acceptanceDb();
+    const env = {
+      DB: fake.db,
+      DRY_RUN: "false",
+      LINE_ENABLED: "true",
+      TARGET_PAGE_URL,
+      ACCEPTANCE_HARNESS_ENABLED: "true",
+      ACCEPTANCE_HARNESS_TOKEN: "harness-token",
+    };
+    const testId = "CF-CUJ-20260806-endpoint";
+    const headers = { authorization: "Bearer harness-token", "content-type": "application/json" };
+    const start = await worker.fetch(new Request("https://worker.test/__acceptance/start", { method: "POST", headers, body: JSON.stringify({ test_id: testId }) }), env);
+    expect(start.status).toBe(201);
+    const observe = await worker.fetch(new Request("https://worker.test/__acceptance/observe", { method: "POST", headers, body: JSON.stringify({ test_id: testId, status: "AVAILABLE", slot_label: "Acceptance Test Slot" }) }), env);
+    expect(observe.status).toBe(200);
+    expect(JSON.parse(fake.acceptances.get(testId)!.state_json).pending_notifications).toHaveLength(5);
+    expect(fake.getCanonicalVersion()).toBe(12);
+    expect(fake.canonical.pending_notifications).toEqual([]);
+    const row = fake.acceptances.get(testId);
+    expect(row).toBeDefined();
+    expect(JSON.parse(row!.state_json).pending_notifications).toHaveLength(5);
+  });
+
+  it("通常cronの配送器だけでAcceptance pendingを1 Round処理する", async () => {
+    const fake = acceptanceDb();
+    const env = {
+      DB: fake.db,
+      DRY_RUN: "false",
+      LINE_ENABLED: "true",
+      TARGET_PAGE_URL,
+      DISCORD_WEBHOOK_URL: "https://discord.invalid/webhook",
+      LINE_CHANNEL_ACCESS_TOKEN: "configured-token",
+      LINE_GROUP_ID: "configured-group",
+      LINE_DESTINATION_MODE: "group",
+      ACCEPTANCE_HARNESS_ENABLED: "true",
+      ACCEPTANCE_HARNESS_TOKEN: "harness-token",
+    };
+    const testId = "CF-CUJ-20260806-delivery";
+    const headers = { authorization: "Bearer harness-token", "content-type": "application/json" };
+    const start = await worker.fetch(new Request("https://worker.test/__acceptance/start", { method: "POST", headers, body: JSON.stringify({ test_id: testId }) }), env);
+    expect(start.status).toBe(201);
+    const observe = await worker.fetch(new Request("https://worker.test/__acceptance/observe", { method: "POST", headers, body: JSON.stringify({ test_id: testId, status: "AVAILABLE", slot_label: "Acceptance Test Slot" }) }), env);
+    expect(observe.status).toBe(200);
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input).startsWith("https://api.line.me")) return new Response("", { status: 200 });
+      if (String(input).startsWith("https://discord")) return new Response(null, { status: 204 });
+      throw new Error("unexpected_external_fetch");
+    });
+    const now = new Date();
+    const scheduledAt = now.getUTCMinutes() % 5 === 0 ? new Date(now.getTime() + 60_000) : now;
+    await runOnce(env, scheduledAt);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fake.getCanonicalVersion()).toBe(12);
+    expect(JSON.parse(fake.acceptances.get(testId)!.state_json).pending_notifications).toHaveLength(4);
+  });
+
+  it("ハーネス無効時はAcceptance endpointを公開しない", async () => {
+    const fake = acceptanceDb();
+    const response = await worker.fetch(new Request("https://worker.test/__acceptance/start", { method: "POST" }), { DB: fake.db, ACCEPTANCE_HARNESS_ENABLED: "false" });
+    expect(response.status).toBe(404);
   });
 });

@@ -16,7 +16,8 @@ database_id = "04c229e8-a76b-40a8-a4b4-17c78bdcf6ff"
 [vars]
 DRY_RUN = "false"
 LINE_ENABLED = "true"
-LINE_DESTINATION_MODE = "personal"
+LINE_DESTINATION_MODE = "group"
+ACCEPTANCE_HARNESS_ENABLED = "false"
 TARGET_PAGE_URL = "https://shop.okaz-design.jp/store/%E8%8C%A8%E3%81%A8%E6%9E%9C%E5%AE%9F-p850942259"
 
 # Secret bindings retained in Cloudflare (names only; no values in Git):
