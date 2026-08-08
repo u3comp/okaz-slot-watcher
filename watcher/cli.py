@@ -26,8 +26,8 @@ def _timestamp() -> str:
 def _format_notification(change) -> str:
     lines: list[str] = []
     if change.available_slots:
-        labels = {slot.key: slot.label for slot in SLOTS}
-        slots = "\n".join(f"- {labels[key]}" for key in change.available_slots)
+        labels = {key: value.get("label", key) for key, value in change.next_state.get("slots", {}).items()}
+        slots = "\n".join(f"- {labels.get(key, key)}" for key in change.available_slots)
         lines.append(f"【空き枠復活】茶と果実\n{slots}\n{PRODUCT_URL}")
     if change.outage_started:
         lines.append("【監視障害】3回連続で全4枠を判定できませんでした。")
@@ -35,6 +35,52 @@ def _format_notification(change) -> str:
         lines.append("【監視復旧】全枠判定不能の状態から復旧しました。")
     lines.append(f"確認時刻: {_timestamp()} (Asia/Tokyo)")
     return "\n\n".join(lines)
+
+
+def _enqueue_opportunity_notifications(state: dict, change, *, include_line: bool) -> None:
+    labels = {key: value.get("label", key) for key, value in change.next_state.get("slots", {}).items()}
+    new_available = set(change.new_slot_available)
+    for key in change.new_slots:
+        if key in new_available:
+            for sequence in range(1, 6):
+                enqueue_notification(
+                    state,
+                    "【新しい申込枠・空きあり {}/5】\n対象: {}\n新しく追加された枠で、現在AVAILABLEです。\n申込みページ: {}\n確認時刻: {} (Asia/Tokyo)".format(
+                        sequence, labels.get(key, key), PRODUCT_URL, _timestamp()
+                    ),
+                    include_line=include_line,
+                )
+        else:
+            enqueue_notification(
+                state,
+                "【新しい申込枠を検知】\n新しい参加枠が追加されました。\n対象: {}\n現在: {}\n今後この枠も自動監視します。\n申込みページ: {}\n確認時刻: {} (Asia/Tokyo)".format(
+                    labels.get(key, key),
+                    change.next_state.get("slots", {}).get(key, {}).get("status", "UNKNOWN"),
+                    PRODUCT_URL,
+                    _timestamp(),
+                ),
+                include_line=include_line,
+            )
+    for key in change.reappeared_slots:
+        enqueue_notification(
+            state,
+            f"【申込枠が再出現】\n対象: {labels.get(key, key)}\n現在: {change.next_state.get('slots', {}).get(key, {}).get('status', 'UNKNOWN')}\n申込みページ: {PRODUCT_URL}\n確認時刻: {_timestamp()} (Asia/Tokyo)",
+            include_line=include_line,
+        )
+    for key in change.removed_confirmed:
+        enqueue_notification(
+            state,
+            f"【監視構造変化を検知】\n枠が2回連続で見つかりません: {labels.get(key, key)}\n自動削除は行っていません。\n申込みページ: {PRODUCT_URL}\n確認時刻: {_timestamp()} (Asia/Tokyo)",
+            include_line=include_line,
+        )
+    if change.structural_anomaly:
+        enqueue_notification(
+            state,
+            f"【監視構造変化を検知】\n検出内容: {change.structural_anomaly}\n自動削除は行っていません。\n申込みページ: {PRODUCT_URL}\n確認時刻: {_timestamp()} (Asia/Tokyo)",
+            include_line=include_line,
+        )
+    if change.available_slots or change.outage_started or change.outage_recovered:
+        enqueue_notification(state, _format_notification(change), include_line=include_line)
 
 
 def run_diagnostic() -> int:
@@ -131,13 +177,14 @@ def run_normal() -> int:
     if loaded.recovered_from_corruption:
         print("WARNING: state issue was corrupt; resetting to safe UNKNOWN state.")
 
-    change = transition(loaded.state, observation["statuses"])
+    change = transition(
+        loaded.state,
+        observation["statuses"],
+        observation.get("slots") if observation.get("parser_ok") else None,
+        observation.get("error_class") if not observation.get("parser_ok") else None,
+    )
     if change.notification_required:
-        enqueue_notification(
-            change.next_state,
-            _format_notification(change),
-            include_line=line_enabled,
-        )
+        _enqueue_opportunity_notifications(change.next_state, change, include_line=line_enabled)
 
     delivery_errors: set[str] = set()
     sent = {"discord": 0, "line": 0}

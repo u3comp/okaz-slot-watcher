@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
 
-from .model import PRODUCT_TITLE, SLOTS, SlotStatus
+from .model import PRODUCT_TITLE, SLOTS, SlotStatus, stable_slot_key, normalize_slot_label
 
 
 _SPACE_RE = re.compile(r"\s+")
@@ -93,6 +93,8 @@ def unknown_observation(reason: str) -> dict:
     return {
         "statuses": {slot.key: SlotStatus.UNKNOWN.value for slot in SLOTS},
         "evidence": {slot.key: reason for slot in SLOTS},
+        "slots": {},
+        "slot_set": [],
         "parser_ok": False,
         "error_class": reason,
     }
@@ -116,32 +118,39 @@ def parse_rendered_html(source: str) -> dict:
         if value:
             by_value.setdefault(normalize(value), []).append((input_id, value))
 
-    statuses: dict[str, str] = {}
-    evidence: dict[str, str] = {}
-    for slot in SLOTS:
-        matches = by_value.get(slot.label, [])
-        if not matches:
-            statuses[slot.key] = SlotStatus.MISSING.value
-            evidence[slot.key] = "slot_missing"
-            continue
-        if len(matches) != 1:
-            statuses[slot.key] = SlotStatus.UNKNOWN.value
-            evidence[slot.key] = "slot_duplicate"
-            continue
-
-        input_id = matches[0][0]
+    statuses: dict[str, str] = {slot.key: SlotStatus.MISSING.value for slot in SLOTS}
+    evidence: dict[str, str] = {slot.key: "slot_missing" for slot in SLOTS}
+    discovered: dict[str, dict[str, str]] = {}
+    for input_id, value in root.inputs:
+        if not value:
+            return unknown_observation("slot_label_missing")
+        key = stable_slot_key(value)
+        if not key or key in discovered:
+            return unknown_observation("duplicate_slot" if key else "slot_unparseable")
+        label = normalize(value)
         label_text = root.labels.get(input_id or "")
         if not label_text:
-            statuses[slot.key] = SlotStatus.UNKNOWN.value
-            evidence[slot.key] = "slot_label_missing"
+            status = SlotStatus.UNKNOWN.value
+            proof = "slot_label_missing"
         elif _SOLD_OUT_RE.search(label_text):
-            statuses[slot.key] = SlotStatus.SOLD_OUT.value
-            evidence[slot.key] = label_text
-        elif label_text == slot.label:
-            statuses[slot.key] = SlotStatus.AVAILABLE.value
-            evidence[slot.key] = label_text
+            status = SlotStatus.SOLD_OUT.value
+            proof = label_text
+        elif normalize_slot_label(label_text) == normalize_slot_label(label):
+            status = SlotStatus.AVAILABLE.value
+            proof = label_text
         else:
-            statuses[slot.key] = SlotStatus.UNKNOWN.value
-            evidence[slot.key] = "slot_label_unrecognized"
+            status = SlotStatus.UNKNOWN.value
+            proof = "slot_label_unrecognized"
+        discovered[key] = {"label": label, "status": status}
+        statuses[key] = status
+        evidence[key] = proof
 
-    return {"statuses": statuses, "evidence": evidence, "parser_ok": True}
+    if not discovered:
+        return unknown_observation("zero_slots")
+    return {
+        "statuses": statuses,
+        "evidence": evidence,
+        "slots": discovered,
+        "slot_set": list(discovered),
+        "parser_ok": True,
+    }

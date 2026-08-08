@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from watcher.model import SLOTS, SlotStatus
+from watcher.model import SLOTS, SlotStatus, stable_slot_key
 from watcher.parser import parse_rendered_html
 
 
@@ -57,3 +57,20 @@ def test_stale_ssr_root_is_ignored() -> None:
     live = (FIXTURES / "sold_out.html").read_text(encoding="utf-8")
     result = parse_rendered_html(stale + live)
     assert set(result["statuses"].values()) == {SlotStatus.SOLD_OUT.value}
+
+
+def test_dynamic_five_slot_discovery_and_stable_identity() -> None:
+    labels = [slot.label for slot in SLOTS] + ["8/22（土）17:00-19:00"]
+    inputs = "".join(
+        f'<input id="s{i}" name="ご希望の日時" value="{label}">'
+        f'<label for="s{i}">{label} - Sold out</label>'
+        for i, label in enumerate(labels)
+    )
+    result = parse_rendered_html(
+        f'<div class="ec-storefront-v3"><h1 class="product-details__product-title">茶と果実</h1>{inputs}</div>'
+    )
+    new_key = stable_slot_key(labels[-1])
+    assert result["parser_ok"]
+    assert len(result["slots"]) == 5
+    assert new_key in result["slots"]
+    assert result["slots"][new_key]["status"] == SlotStatus.SOLD_OUT.value

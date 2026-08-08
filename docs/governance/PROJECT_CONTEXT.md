@@ -259,3 +259,17 @@ Human Review前に禁止される行為:
 - 再度Decision Conflictが発生する。
 - 複数AI / 複数PCで継続する。
 - Production障害または状態不整合が発生する。
+
+## 16. Outcome-First Opportunity Surface Detection (2026-08-08)
+
+- Incident: `MISSED_OPPORTUNITY_SURFACE_CHANGE`。従来の固定4枠監視では、実ページに追加された申込枠を監視対象へ取り込めず、ユーザーが行動できる機会の変化を見逃し得た。
+- Preflight facts: D1の正本状態は4枠。2026-08-08のEcwid `catalog/product` API再取得はHTTP 200で5枠を返し、`8/22（土）17:00-19:00` が現在の追加枠として確認された。5枠目をD1へ事前seedせず、旧4枠との差分をProduction Observationで検出する。
+- Root cause: `fixed-known-slot monitoring` と、申込機会集合の増減をイベントとして扱わない設計。
+- Corrective principle: `OUTCOME_FIRST_OPPORTUNITY_SURFACE_CHANGE`。
+- New contract: 毎回の5分境界観測でEcwid公開 `catalog/product` の全選択肢をDiscoveryし、正規化した開催日・開始時刻ベースのstable keyで集合差分を計算する。DOM順序はidentityに使わない。
+- Addition: 新規枠は現在 `SOLD_OUT` でも `NEW_SLOT` を1回だけ生成し、対象ページURLと現在状態を通知する。初回から `AVAILABLE` の新規枠は `NEW_SLOT_AVAILABLE` として既存5 Roundへ統合し、単独の重複NEW_SLOTを生成しない。
+- Removal: 1回の欠落ではcanonical stateを削除せず、2回連続欠落で確認通知を生成する。再出現は別の機会イベントとして一度だけ扱う。
+- Structural safety: 0件、重複、解析不能、想定外の大量変化は構造異常として扱い、既存canonical枠を推測で削除しない。
+- Cadence decision: Cronは毎分のまま、対象ページ観測は既存契約どおり5分境界を維持する。対象サイトへのリクエスト負荷と無料枠を追加検証せず1分観測へ変更しないため、最大約5分の `OUTCOME_LATENCY_RESIDUAL_RISK` が残る。
+- Validation status: 動的Discovery、set diff、通知抑制、Removal safety、Worker/Python統合テストは検証済み。実Production 4→5差分はAPI preflightで確認済みだが、Candidate Deploy後のD1検出・Discord/LINE配送とHuman receiptは未完了である。
+- Boundary: GitHub Actions schedule、既存Issue、LINE/Discord Secret、購入操作、親repo-Yggdrasillは変更しない。既存untracked 8件はstage・commitしない。

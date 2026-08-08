@@ -366,7 +366,7 @@ describe("DRY_RUNと状態診断", () => {
       if (url.startsWith("https://au-syd3")) return soldOut();
       throw new Error(`unexpected external notification: ${url}`);
     });
-    await runOnce({ DB: db, DRY_RUN: "true", TARGET_PAGE_URL, DISCORD_WEBHOOK_URL: "https://discord.invalid", LINE_ENABLED: "true", LINE_CHANNEL_ACCESS_TOKEN: "not-used", LINE_USER_ID: "not-used" }, new Date("2026-08-03T11:00:00.000Z"));
+    await runOnce({ DB: db, DRY_RUN: "true", DYNAMIC_DISCOVERY: "false", TARGET_PAGE_URL, DISCORD_WEBHOOK_URL: "https://discord.invalid", LINE_ENABLED: "true", LINE_CHANNEL_ACCESS_TOKEN: "not-used", LINE_USER_ID: "not-used" }, new Date("2026-08-03T11:00:00.000Z"));
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(dryEvents).toHaveLength(0);
     expect(state.slots[SLOTS[0].key].diagnostic).toMatchObject({ attempt_count: 1, http_status: 200 });
@@ -381,7 +381,7 @@ describe("DRY_RUNと状態診断", () => {
   it("障害通知済み状態では次回全件失敗時にoutageを重複生成しない", async () => {
     const fake = fakeRunDb(testState("UNKNOWN", 3, true));
     const fetchMock = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("network"));
-    await runOnce({ DB: fake.db, DRY_RUN: "true", TARGET_PAGE_URL }, new Date("2026-08-03T11:00:00.000Z"));
+    await runOnce({ DB: fake.db, DRY_RUN: "true", DYNAMIC_DISCOVERY: "false", TARGET_PAGE_URL }, new Date("2026-08-03T11:00:00.000Z"));
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(fake.dryEvents).toEqual([]);
     expect(fake.getState().outage_notified).toBe(true);
@@ -401,6 +401,7 @@ describe("DRY_RUNと状態診断", () => {
     await runOnce({
       DB: fake.db,
       DRY_RUN: "true",
+      DYNAMIC_DISCOVERY: "false",
       TARGET_PAGE_URL,
       DISCORD_WEBHOOK_URL: "configured-but-not-used",
       LINE_ENABLED: "true",
@@ -436,6 +437,7 @@ describe("LINE_ENABLED契約", () => {
     const env = {
       DB: fake.db,
       DRY_RUN: "false",
+      DYNAMIC_DISCOVERY: "false",
       TARGET_PAGE_URL,
       LINE_ENABLED: "true",
       DISCORD_WEBHOOK_URL: "https://discord.invalid/webhook",
@@ -466,7 +468,7 @@ describe("LINE_ENABLED契約", () => {
       if (url.startsWith("https://api.line.me")) { lineCalls += 1; return new Response("", { status: 200 }); }
       throw new Error("unexpected_external_fetch");
     });
-    const env = { DB: fake.db, DRY_RUN: "false", TARGET_PAGE_URL, LINE_ENABLED: "true", DISCORD_WEBHOOK_URL: "https://discord.invalid/webhook", LINE_CHANNEL_ACCESS_TOKEN: "configured-but-not-used-in-tests", LINE_USER_ID: "configured-but-not-used-in-tests" };
+    const env = { DB: fake.db, DRY_RUN: "false", DYNAMIC_DISCOVERY: "false", TARGET_PAGE_URL, LINE_ENABLED: "true", DISCORD_WEBHOOK_URL: "https://discord.invalid/webhook", LINE_CHANNEL_ACCESS_TOKEN: "configured-but-not-used-in-tests", LINE_USER_ID: "configured-but-not-used-in-tests" };
     await runOnce(env, new Date("2026-08-03T11:00:00.000Z"));
     await runOnce(env, new Date("2026-08-03T11:01:00.000Z"));
     await runOnce(env, new Date("2026-08-03T11:02:00.000Z"));
@@ -488,7 +490,7 @@ describe("LINE_ENABLED契約", () => {
         if (url.startsWith("https://api.line.me")) { lineCalls += 1; return new Response("", { status: 200 }); }
         throw new Error("unexpected_external_fetch");
       });
-      await runOnce({ DB: fake.db, DRY_RUN: "false", TARGET_PAGE_URL, LINE_ENABLED: lineEnabled, LINE_CHANNEL_ACCESS_TOKEN: "configured-but-not-used-in-tests", LINE_USER_ID: "configured-but-not-used-in-tests" }, new Date("2026-08-03T11:00:00.000Z"));
+      await runOnce({ DB: fake.db, DRY_RUN: "false", DYNAMIC_DISCOVERY: "false", TARGET_PAGE_URL, LINE_ENABLED: lineEnabled, LINE_CHANNEL_ACCESS_TOKEN: "configured-but-not-used-in-tests", LINE_USER_ID: "configured-but-not-used-in-tests" }, new Date("2026-08-03T11:00:00.000Z"));
       expect(lineCalls).toBe(0);
       vi.restoreAllMocks();
     }
@@ -497,7 +499,7 @@ describe("LINE_ENABLED契約", () => {
   it("LINE_ENABLED=trueでSecret不足の場合は監視処理を開始しない", async () => {
     const fake = fakeRunDb(testState("SOLD_OUT"));
     const fetchMock = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("must_not_fetch"));
-    await runOnce({ DB: fake.db, DRY_RUN: "false", TARGET_PAGE_URL, LINE_ENABLED: "true" }, new Date("2026-08-03T11:00:00.000Z"));
+    await runOnce({ DB: fake.db, DRY_RUN: "false", DYNAMIC_DISCOVERY: "false", TARGET_PAGE_URL, LINE_ENABLED: "true" }, new Date("2026-08-03T11:00:00.000Z"));
     expect(fetchMock).not.toHaveBeenCalled();
     expect(fake.getVersion()).toBe(0);
   });

@@ -65,6 +65,7 @@ function notificationEnv(db: D1Database) {
   return {
     DB: db,
     DRY_RUN: "false",
+    DYNAMIC_DISCOVERY: "false",
     LINE_ENABLED: "true",
     TARGET_PAGE_URL,
     DISCORD_WEBHOOK_URL: "https://discord.invalid/webhook",
@@ -105,7 +106,7 @@ describe("availability five-shot series", () => {
   it("DRY_RUNでは5件の予定だけを証跡化しProduction pendingへ追加しない", async () => {
     const fake = fakeDb(stateWithSlots());
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(available());
-    await runOnce({ DB: fake.db, DRY_RUN: "true", TARGET_PAGE_URL, LINE_ENABLED: "true", LINE_CHANNEL_ACCESS_TOKEN: "fixture", LINE_USER_ID: "fixture" }, T0);
+    await runOnce({ DB: fake.db, DRY_RUN: "true", DYNAMIC_DISCOVERY: "false", TARGET_PAGE_URL, LINE_ENABLED: "true", LINE_CHANNEL_ACCESS_TOKEN: "fixture", LINE_USER_ID: "fixture" }, T0);
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(fake.getState().pending_notifications).toEqual([]);
     expect(fake.dryEvents).toHaveLength(5);
@@ -243,7 +244,7 @@ describe("availability five-shot series", () => {
   it("cutoff以降は観測も配送も行わない", async () => {
     const fake = fakeDb(stateWithSlots());
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(available());
-    await runOnce({ DB: fake.db, DRY_RUN: "false", TARGET_PAGE_URL, LINE_ENABLED: "true" }, new Date("2026-08-23T07:30:00.000Z"));
+    await runOnce({ DB: fake.db, DRY_RUN: "false", DYNAMIC_DISCOVERY: "false", TARGET_PAGE_URL, LINE_ENABLED: "true" }, new Date("2026-08-23T07:30:00.000Z"));
     expect(fetchMock).not.toHaveBeenCalled();
     expect(fake.getVersion()).toBe(0);
   });

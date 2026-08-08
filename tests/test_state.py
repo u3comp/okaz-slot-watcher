@@ -52,3 +52,19 @@ def test_schema_v1_migrates_without_queuing_notifications() -> None:
     assert migrated["schema_version"] == 2
     assert migrated["pending_notifications"] == []
     assert migrated["slots"][SLOTS[0].key]["status"] == SlotStatus.SOLD_OUT.value
+
+
+def test_dynamic_slot_addition_is_one_shot_and_order_independent() -> None:
+    previous = default_state()
+    added_key = "2026-08-22_1700"
+    observed_slots = {
+        **{slot.key: {"label": slot.label, "status": SlotStatus.SOLD_OUT.value} for slot in reversed(SLOTS)},
+        added_key: {"label": "8/22（土）17:00-19:00", "status": SlotStatus.SOLD_OUT.value},
+    }
+    observed_statuses = {key: value["status"] for key, value in observed_slots.items()}
+    first = transition(previous, observed_statuses, observed_slots)
+    assert first.new_slots == (added_key,)
+    assert len(first.next_state["slots"]) == 5
+    second = transition(first.next_state, observed_statuses, observed_slots)
+    assert second.new_slots == ()
+    assert second.available_slots == ()

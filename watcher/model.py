@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import re
+import unicodedata
 from enum import StrEnum
 from zoneinfo import ZoneInfo
 
@@ -37,6 +39,23 @@ SLOTS = (
     Slot("2026-08-23_1030", "8/23（日）10:30-12:30"),
     Slot("2026-08-23_1400", "8/23（日）14:00-16:00"),
 )
+
+
+def normalize_slot_label(label: str) -> str:
+    return " ".join(unicodedata.normalize("NFKC", label).replace("\u3000", " ").split())
+
+
+def stable_slot_key(label: str, reference: datetime | None = None) -> str | None:
+    normalized = normalize_slot_label(label)
+    match = re.search(
+        r"(\d{1,2})\s*/\s*(\d{1,2})[^0-9]{0,12}(\d{1,2})\s*:\s*(\d{2})\s*-\s*(\d{1,2})\s*:\s*(\d{2})",
+        normalized,
+    )
+    if not match:
+        return None
+    year = (reference or now_jst()).year
+    month, day, hour, minute = match.group(1), match.group(2), match.group(3), match.group(4)
+    return f"{year:04d}-{int(month):02d}-{int(day):02d}_{int(hour):02d}{minute}"
 
 
 def now_jst() -> datetime:

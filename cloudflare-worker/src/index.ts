@@ -2,19 +2,27 @@ const PRODUCT_ID = 850942259;
 const STORE_ID = 27747031;
 const OPTION_NAME = "ご希望の日時";
 const OVERRIDES_URL = `https://au-syd3-storefront-api.ecwid.com/storefront/api/v1/${STORE_ID}/catalog/product/overrides`;
+const PRODUCT_URL = `https://au-syd3-storefront-api.ecwid.com/storefront/api/v1/${STORE_ID}/catalog/product`;
 const CUTOFF_MS = Date.parse("2026-08-23T07:30:00.000Z");
 const FETCH_TIMEOUT_MS = 12_000;
 const MAX_ECWID_ATTEMPTS = 3;
 const MAX_DELIVERY_ATTEMPTS = 3;
+const MAX_PAGE_BYTES = 512 * 1024;
 const LOCK_LEASE_MS = 4 * 60_000;
 const USER_AGENT = "okaz-slot-watcher-cf/1.0";
+const MAX_DISCOVERED_SLOTS = 24;
+const REMOVAL_CONFIRMATIONS = 2;
 
-export const SLOTS = [
+export type SlotDefinition = { key: string; label: string };
+
+// Kept as a compatibility fixture for existing tests and legacy state
+// migration. Production observation never uses this fixed list.
+export const SLOTS: readonly SlotDefinition[] = [
   { key: "2026-08-22_1030", label: "8/22（土）10:30-12:30" },
   { key: "2026-08-22_1400", label: "8/22（土）14:00-16:00" },
   { key: "2026-08-23_1030", label: "8/23（日）10:30-12:30" },
   { key: "2026-08-23_1400", label: "8/23（日）14:00-16:00" },
-] as const;
+];
 
 type Status = "AVAILABLE" | "SOLD_OUT" | "MISSING" | "UNKNOWN";
 type ChannelState = { discord: boolean; line?: boolean };
@@ -101,6 +109,10 @@ type SlotState = {
   variationId?: number;
   reason?: string;
   diagnostic?: SlotDiagnostic;
+  first_seen_at_utc?: string;
+  last_seen_at_utc?: string;
+  active?: boolean;
+  missing_observation_count?: number;
 };
 export type State = {
   schema_version: 2;
@@ -122,6 +134,10 @@ export type State = {
   last_redirect_status?: number;
   last_redirect_location_present?: boolean;
   last_redirect_host?: string;
+  slot_set_observed_at_utc?: string;
+  slot_set_count?: number;
+  slot_set_anomaly?: string;
+  opportunity_events?: Record<string, { kind: string; first_seen_at_utc: string }>;
   acceptance?: {
     test_id: string;
     phase: "baseline" | "available" | "complete";
@@ -139,6 +155,7 @@ export interface Env {
   LINE_ENABLED?: string;
   LINE_DESTINATION_MODE?: string;
   TARGET_PAGE_URL?: string;
+  DYNAMIC_DISCOVERY?: string;
   DISCORD_WEBHOOK_URL?: string;
   LINE_CHANNEL_ACCESS_TOKEN?: string;
   LINE_USER_ID?: string;
@@ -189,11 +206,12 @@ function nowJst(at = new Date()): string {
 function defaultState(): State {
   return {
     schema_version: 2,
-    slots: Object.fromEntries(SLOTS.map((slot) => [slot.key, { label: slot.label, status: "UNKNOWN" }])),
+    slots: {},
     consecutive_total_failures: 0,
     outage_notified: false,
     pending_notifications: [],
     updated_at_jst: nowJst(),
+    opportunity_events: {},
   };
 }
 
@@ -411,10 +429,10 @@ async function readRequestBody(request: Request, maxBytes = 8 * 1024): Promise<s
   return new TextDecoder().decode(body);
 }
 
-async function readLimitedText(response: Response): Promise<{ text: string; truncated: boolean }> {
+async function readLimitedText(response: Response, maxBytes = MAX_RESPONSE_BYTES): Promise<{ text: string; truncated: boolean }> {
   if (!response.body) {
     const text = await response.text();
-    return { text: text.slice(0, MAX_RESPONSE_BYTES), truncated: text.length > MAX_RESPONSE_BYTES };
+    return { text: text.slice(0, maxBytes), truncated: text.length > maxBytes };
   }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -422,10 +440,10 @@ async function readLimitedText(response: Response): Promise<{ text: string; trun
   let bytes = 0;
   let truncated = false;
   try {
-    while (bytes < MAX_RESPONSE_BYTES) {
+    while (bytes < maxBytes) {
       const chunk = await reader.read();
       if (chunk.done) break;
-      const remaining = MAX_RESPONSE_BYTES - bytes;
+      const remaining = maxBytes - bytes;
       const part = chunk.value.byteLength > remaining ? chunk.value.slice(0, remaining) : chunk.value;
       text += decoder.decode(part, { stream: true });
       bytes += part.byteLength;
@@ -463,6 +481,81 @@ function clearLastDiagnostics(state: State): void {
   delete state.last_redirect_status;
   delete state.last_redirect_location_present;
   delete state.last_redirect_host;
+}
+
+export type SlotDiscoveryResult = {
+  slots: SlotDefinition[];
+  anomaly?: "container_missing" | "zero_slots" | "duplicate_slot" | "too_many_slots" | "unparseable_slot";
+};
+
+export function normalizeSlotLabel(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/[\u00a0\u3000]+/g, " ")
+    .replace(/[〜～−ー]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function stableSlotKey(label: string, referenceAt = new Date()): string | undefined {
+  const normalized = normalizeSlotLabel(label);
+  const match = normalized.match(/(\d{1,2})\s*\/\s*(\d{1,2})[^0-9]{0,12}(\d{1,2})\s*:\s*(\d{2})\s*-\s*(\d{1,2})\s*:\s*(\d{2})/);
+  if (!match) return undefined;
+  const year = referenceAt.getUTCFullYear();
+  const [, month, day, startHour, startMinute] = match;
+  // Preserve the legacy key shape (YYYY-MM-DD_HHMM) while deriving it from
+  // the semantic date/time, never from DOM position.
+  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}_${startHour.padStart(2, "0")}${startMinute}`;
+}
+
+function htmlAttribute(tag: string, name: string): string | undefined {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = tag.match(new RegExp(`${escaped}\\s*=\\s*[\\\"']([^\\\"']*)[\\\"']`, "i"));
+  return match?.[1];
+}
+
+export function discoverSlotsFromHtml(html: string, referenceAt = new Date()): SlotDiscoveryResult {
+  const tags = [...html.matchAll(/<input\b[^>]*>/gi)].map((match) => match[0]);
+  const optionTags = tags.filter((tag) => htmlAttribute(tag, "name") === OPTION_NAME);
+  if (optionTags.length === 0) return { slots: [], anomaly: "container_missing" };
+  const slots: SlotDefinition[] = [];
+  const keys = new Set<string>();
+  for (const tag of optionTags) {
+    const rawLabel = htmlAttribute(tag, "value");
+    const label = rawLabel ? rawLabel.replace(/[\u00a0\u3000]+/g, " ").replace(/\s+/g, " ").trim() : "";
+    const key = label ? stableSlotKey(label, referenceAt) : undefined;
+    if (!key || keys.has(key)) return { slots: [], anomaly: key ? "duplicate_slot" : "unparseable_slot" };
+    keys.add(key);
+    slots.push({ key, label });
+  }
+  if (slots.length === 0) return { slots: [], anomaly: "zero_slots" };
+  if (slots.length > MAX_DISCOVERED_SLOTS) return { slots: [], anomaly: "too_many_slots" };
+  return { slots };
+}
+
+export function discoverSlotsFromProductPayload(payload: unknown, referenceAt = new Date()): SlotDiscoveryResult {
+  const root = payload as { defaultOptionsOverrides?: { pricesOverrides?: { optionsChoicesWithModifiersAndTaxes?: unknown } } } | null;
+  const groups = root?.defaultOptionsOverrides?.pricesOverrides?.optionsChoicesWithModifiersAndTaxes;
+  if (!Array.isArray(groups)) return { slots: [], anomaly: "container_missing" };
+  const option = groups.find((entry) => entry && typeof entry === "object" && (entry as { optionId?: unknown }).optionId === OPTION_NAME) as { choices?: unknown } | undefined;
+  if (!option || !Array.isArray(option.choices)) return { slots: [], anomaly: "container_missing" };
+  const slots: SlotDefinition[] = [];
+  const keys = new Set<string>();
+  for (const choice of option.choices) {
+    const value = choice && typeof choice === "object"
+      ? (choice as { choiceName?: unknown; choiceId?: unknown }).choiceName ?? (choice as { choiceId?: unknown }).choiceId
+      : undefined;
+    const label = typeof value === "string"
+      ? value.replace(/[\u00a0\u3000]+/g, " ").replace(/\s+/g, " ").trim()
+      : "";
+    const key = label ? stableSlotKey(label, referenceAt) : undefined;
+    if (!key || keys.has(key)) return { slots: [], anomaly: key ? "duplicate_slot" : "unparseable_slot" };
+    keys.add(key);
+    slots.push({ key, label });
+  }
+  if (slots.length === 0) return { slots: [], anomaly: "zero_slots" };
+  if (slots.length > MAX_DISCOVERED_SLOTS) return { slots: [], anomaly: "too_many_slots" };
+  return { slots };
 }
 
 export function statusFromResponse(payload: unknown): { status: Status; quantity?: number; variationId?: number } {
@@ -525,7 +618,58 @@ async function responseDiagnostic(response: Response, attempt: number): Promise<
   return { diagnostic, bodyText: body.text };
 }
 
-export async function observeSlot(slot: (typeof SLOTS)[number]): Promise<SlotState> {
+export async function discoverSlots(targetUrl: string, referenceAt = new Date()): Promise<SlotDiscoveryResult> {
+  const productId = targetUrl.match(/(?:^|[-/])p(\d+)(?:[/?#]|$)/i)?.[1];
+  if (!productId) return { slots: [], anomaly: "container_missing" };
+  for (let attempt = 1; attempt <= MAX_ECWID_ATTEMPTS; attempt += 1) {
+    let response: Response;
+    try {
+      response = await fetch(PRODUCT_URL, {
+        method: "POST",
+        redirect: "manual",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        headers: { accept: "application/json", "content-type": "application/json", "user-agent": USER_AGENT },
+        body: JSON.stringify({
+          lang: "ja",
+          productIdentifier: { type: "PUBLISHED", productId: Number(productId) },
+          urlParams: {
+            urlType: "CLEAN_URL",
+            baseUrl: `${new URL(targetUrl).origin}/store/`,
+            canonicalBaseUrl: "",
+            isCleanUrls: true,
+            isCanonicalUrlsEnabled: true,
+            isSlugsWithoutIds: false,
+            isTrailingSlash: false,
+          },
+        }),
+      });
+    } catch (error) {
+      if (attempt < MAX_ECWID_ATTEMPTS) {
+        await wait(250 * (2 ** (attempt - 1)));
+        continue;
+      }
+      return { slots: [], anomaly: "container_missing" };
+    }
+    if ([429, 502, 503, 504].includes(response.status) && attempt < MAX_ECWID_ATTEMPTS) {
+      await wait(Math.max(retryAfterMs(response), 250 * (2 ** (attempt - 1))));
+      continue;
+    }
+    if (response.status >= 300 && response.status <= 399) return { slots: [], anomaly: "container_missing" };
+    if (!response.ok) return { slots: [], anomaly: "container_missing" };
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !/json/i.test(contentType)) return { slots: [], anomaly: "container_missing" };
+    try {
+      const body = await readLimitedText(response, MAX_PAGE_BYTES);
+      if (body.truncated) return { slots: [], anomaly: "container_missing" };
+      return discoverSlotsFromProductPayload(JSON.parse(body.text) as unknown, referenceAt);
+    } catch {
+      return { slots: [], anomaly: "container_missing" };
+    }
+  }
+  return { slots: [], anomaly: "container_missing" };
+}
+
+export async function observeSlot(slot: SlotDefinition): Promise<SlotState> {
   for (let attempt = 1; attempt <= MAX_ECWID_ATTEMPTS; attempt += 1) {
     let response: Response;
     try {
@@ -758,6 +902,32 @@ export function buildAcceptanceAvailabilityMessage(
     `検知時刻: ${nowJst(detectedAt)}`,
     "本番通知で使用する購入ページ:",
     targetUrl,
+  ].join("\n");
+}
+
+export function buildNewSlotMessage(slot: SlotDefinition, status: Status, detectedAt: Date, targetUrl: string): string {
+  return [
+    "【新しい申込枠を検知】",
+    "新しい参加枠が追加されました。",
+    `対象: ${slot.label}`,
+    `現在: ${status === "SOLD_OUT" ? "Sold out" : status}`,
+    "今後この枠も自動監視します。",
+    pageLink(targetUrl),
+    `検知時刻: ${nowJst(detectedAt)}`,
+  ].join("\n");
+}
+
+export function buildNewSlotAvailableMessage(
+  sequence: number,
+  total: number,
+  slot: SlotDefinition,
+  detectedAt: Date,
+  targetUrl: string,
+): string {
+  return [
+    buildAvailabilityMessage(sequence, total, slot.label, detectedAt, targetUrl),
+    "",
+    "新しく追加された枠です。現在AVAILABLEのため、直ちに確認してください。",
   ].join("\n");
 }
 
@@ -1244,6 +1414,74 @@ function applyRunDiagnostics(state: State, runId: string, observedAt: Date, slot
   state.last_redirect_host = representative.redirect_host;
 }
 
+type SlotDiff = {
+  added: SlotDefinition[];
+  removed: SlotDefinition[];
+  reappeared: SlotDefinition[];
+  statusChanged: Array<{ slot: SlotDefinition; previous?: Status; current: Status }>;
+};
+
+function rememberOpportunity(state: State, fingerprint: string, kind: string, observedAt: Date): boolean {
+  state.opportunity_events ??= {};
+  if (state.opportunity_events[fingerprint]) return false;
+  state.opportunity_events[fingerprint] = { kind, first_seen_at_utc: observedAt.toISOString() };
+  return true;
+}
+
+function slotDiff(previous: Record<string, SlotState>, current: SlotDefinition[], observed: Record<string, SlotState>): SlotDiff {
+  const currentByKey = new Map(current.map((slot) => [slot.key, slot]));
+  const previousByKey = new Map(Object.entries(previous).map(([key, value]) => [key, { key, label: value.label, state: value }]));
+  const added: SlotDefinition[] = [];
+  const reappeared: SlotDefinition[] = [];
+  const statusChanged: SlotDiff["statusChanged"] = [];
+  for (const slot of current) {
+    const prior = previousByKey.get(slot.key);
+    if (!prior) added.push(slot);
+    else if (prior.state.active === false) reappeared.push(slot);
+    const currentState = observed[slot.key];
+    if (prior && currentState && prior.state.status !== currentState.status) {
+      statusChanged.push({ slot, previous: prior.state.status, current: currentState.status });
+    }
+  }
+  const removed = [...previousByKey.values()]
+    .filter((entry) => !currentByKey.has(entry.key) && entry.state.active !== false)
+    .map((entry) => ({ key: entry.key, label: entry.label }));
+  return { added, removed, reappeared, statusChanged };
+}
+
+function mergeDiscoveredSlots(
+  previous: Record<string, SlotState>,
+  discovered: SlotDefinition[],
+  observed: Record<string, SlotState>,
+  observedAt: Date,
+): Record<string, SlotState> {
+  const next: Record<string, SlotState> = {};
+  const currentKeys = new Set(discovered.map((slot) => slot.key));
+  for (const slot of discovered) {
+    const before = previous[slot.key];
+    next[slot.key] = {
+      ...observed[slot.key],
+      first_seen_at_utc: before?.first_seen_at_utc ?? observedAt.toISOString(),
+      last_seen_at_utc: observedAt.toISOString(),
+      active: true,
+      missing_observation_count: 0,
+    };
+  }
+  for (const [key, before] of Object.entries(previous)) {
+    if (currentKeys.has(key)) continue;
+    const missingCount = (before.missing_observation_count ?? 0) + 1;
+    next[key] = {
+      ...before,
+      status: missingCount >= REMOVAL_CONFIRMATIONS ? "MISSING" : before.status,
+      reason: missingCount >= REMOVAL_CONFIRMATIONS ? "removed_confirmed" : "removal_candidate",
+      active: missingCount < REMOVAL_CONFIRMATIONS,
+      missing_observation_count: missingCount,
+      last_seen_at_utc: before.last_seen_at_utc,
+    };
+  }
+  return next;
+}
+
 export async function runOnce(env: Env, at = new Date()): Promise<void> {
   if (at.getTime() >= CUTOFF_MS || !validateStartup(env)) return;
   const owner = crypto.randomUUID();
@@ -1269,29 +1507,95 @@ export async function runOnce(env: Env, at = new Date()): Promise<void> {
       return;
     }
     const dryEvents: Pending[] = [];
-    const observed = await Promise.all(SLOTS.map(async (slot) => {
-      try { return [slot.key, await observeSlot(slot)] as const; }
-      catch {
-        return [slot.key, {
-          label: slot.label,
-          status: "UNKNOWN" as Status,
-          reason: "ecwid_observation_failed",
-          diagnostic: {
-            attempt_count: 0,
-            error_class: "unknown_exception" as DiagnosticClass,
-            error_name: "ObservationError",
-            error_message: "observation_failed",
-          },
-        }] as const;
-      }
-    }));
-    const nextSlots = Object.fromEntries(observed);
+    const discovery = env.DYNAMIC_DISCOVERY === "false"
+      ? { slots: [...SLOTS] }
+      : await discoverSlots(targetUrl, observedAt);
+    let discoveredSlots = discovery.slots;
+    let observed: Record<string, SlotState>;
+    let structuralAnomaly = discovery.anomaly;
+    if (structuralAnomaly || discoveredSlots.length === 0) {
+      discoveredSlots = Object.entries(record.state.slots).map(([key, value]) => ({ key, label: value.label }));
+      observed = Object.fromEntries(discoveredSlots.map((slot) => [slot.key, {
+        ...(record.state.slots[slot.key] ?? { label: slot.label, status: "UNKNOWN" as Status }),
+        label: slot.label,
+        status: "UNKNOWN" as Status,
+        reason: structuralAnomaly ? `structural_${structuralAnomaly}` : "ecwid_observation_failed",
+        diagnostic: {
+          attempt_count: 0,
+          error_class: "unknown_exception" as DiagnosticClass,
+          error_name: "DiscoveryError",
+          error_message: structuralAnomaly ?? "discovery_failed",
+        },
+      }]));
+    } else {
+      const observedEntries = await Promise.all(discoveredSlots.map(async (slot) => {
+        try { return [slot.key, await observeSlot(slot)] as const; }
+        catch {
+          return [slot.key, {
+            label: slot.label,
+            status: "UNKNOWN" as Status,
+            reason: "ecwid_observation_failed",
+            diagnostic: {
+              attempt_count: 0,
+              error_class: "unknown_exception" as DiagnosticClass,
+              error_name: "ObservationError",
+              error_message: "observation_failed",
+            },
+          }] as const;
+        }
+      }));
+      observed = Object.fromEntries(observedEntries);
+    }
+    const previousSlots = record.state.slots;
+    const diff = structuralAnomaly ? { added: [], removed: [], reappeared: [], statusChanged: [] } as SlotDiff : slotDiff(previousSlots, discoveredSlots, observed);
+    const nextSlots = structuralAnomaly
+      ? observed
+      : mergeDiscoveredSlots(previousSlots, discoveredSlots, observed, observedAt);
+    record.state.slot_set_observed_at_utc = observedAt.toISOString();
+    record.state.slot_set_count = structuralAnomaly ? 0 : discoveredSlots.length;
+    record.state.slot_set_anomaly = structuralAnomaly;
     applyRunDiagnostics(record.state, runId, observedAt, nextSlots);
-    const available = SLOTS.filter((slot) => nextSlots[slot.key].status === "AVAILABLE" && record.state.slots[slot.key]?.status !== "AVAILABLE");
-    const allFailed = SLOTS.every((slot) => ["MISSING", "UNKNOWN"].includes(nextSlots[slot.key].status));
+    const newOpportunityKeys = new Set([...diff.added, ...diff.reappeared].map((slot) => slot.key));
+    const available = discoveredSlots.filter((slot) => nextSlots[slot.key]?.status === "AVAILABLE" && previousSlots[slot.key]?.status !== "AVAILABLE" && !newOpportunityKeys.has(slot.key));
+    const allFailed = Object.values(nextSlots).length === 0 || Object.values(nextSlots).every((slot) => ["MISSING", "UNKNOWN"].includes(slot.status));
     const previousFailureCount = record.state.consecutive_total_failures;
     record.state.slots = nextSlots;
-    record.state.consecutive_total_failures = allFailed ? previousFailureCount + 1 : 0;
+    record.state.consecutive_total_failures = structuralAnomaly || allFailed ? previousFailureCount + 1 : 0;
+    if (structuralAnomaly) {
+      const fingerprint = `structural:${structuralAnomaly}`;
+      if (rememberOpportunity(record.state, fingerprint, "structural_change", observedAt)) {
+        enqueueSingleNotification(record.state, "structural_change", `【監視構造変化を検知】\n検出内容: ${structuralAnomaly}\n自動削除は行っていません。\n${pageLink(targetUrl)}`, lineEnabled, dryRun, dryEvents);
+      }
+    }
+    for (const slot of diff.added) {
+      if (!rememberOpportunity(record.state, `new:${slot.key}`, "new_slot", observedAt)) continue;
+      if (nextSlots[slot.key].status === "AVAILABLE") {
+        enqueueSeries(
+          record.state,
+          slot.label,
+          observedAt,
+          targetUrl,
+          lineEnabled,
+          dryRun,
+          dryEvents,
+          (sequence, total) => buildNewSlotAvailableMessage(sequence, total, slot, observedAt, targetUrl),
+        );
+      } else {
+        enqueueSingleNotification(record.state, "new_slot", buildNewSlotMessage(slot, nextSlots[slot.key].status, observedAt, targetUrl), lineEnabled, dryRun, dryEvents);
+      }
+    }
+    for (const slot of diff.reappeared) {
+      const fingerprint = `reappeared:${slot.key}:${previousSlots[slot.key]?.missing_observation_count ?? 0}`;
+      if (rememberOpportunity(record.state, fingerprint, "reappeared", observedAt)) {
+        enqueueSingleNotification(record.state, "reappeared", `【申込枠が再出現】\n対象: ${slot.label}\n現在: ${nextSlots[slot.key].status}\n${pageLink(targetUrl)}`, lineEnabled, dryRun, dryEvents);
+      }
+    }
+    for (const slot of diff.removed) {
+      const missingCount = (previousSlots[slot.key]?.missing_observation_count ?? 0) + 1;
+      if (missingCount >= REMOVAL_CONFIRMATIONS && rememberOpportunity(record.state, `removed:${slot.key}`, "removed_confirmed", observedAt)) {
+        enqueueSingleNotification(record.state, "removed_confirmed", `【監視構造変化を検知】\n枠が${REMOVAL_CONFIRMATIONS}回連続で見つかりません: ${slot.label}\n自動削除は行っていません。\n${pageLink(targetUrl)}`, lineEnabled, dryRun, dryEvents);
+      }
+    }
     if (available.length) {
       enqueueAvailabilitySeries(
         record.state,
@@ -1315,7 +1619,7 @@ export async function runOnce(env: Env, at = new Date()): Promise<void> {
       const changed = await deliverPending(env, record.state, lineEnabled, observedAt);
       if (changed) version = await saveState(env.DB, record.state, version, observedAt);
     }
-    console.log(JSON.stringify({ event: "watcher_metrics", dry_run: dryRun, duration_ms: Date.now() - started, version, statuses: SLOTS.map((slot) => record.state.slots[slot.key].status) }));
+    console.log(JSON.stringify({ event: "watcher_metrics", dry_run: dryRun, duration_ms: Date.now() - started, version, slot_count: discoveredSlots.length, statuses: Object.values(record.state.slots).map((slot) => slot.status) }));
   } finally {
     if (locked) { try { await releaseLease(env.DB, owner); } catch { console.log("lock_release_failed"); } }
   }
