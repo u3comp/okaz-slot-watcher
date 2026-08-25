@@ -80,3 +80,21 @@ Evidence file SHA-256:
 - Required secret names remain present; values were never read or recorded.
 - Cloudflare schedules endpoint returned an empty list after hibernation.
 - No D1 write, truncate, deletion, notification, or source-code change was performed by the close operation.
+
+## Self-contained completion record
+
+- Final commit: `5279be87fe80050f820331d5c008fc178c9c0c0d`.
+- `origin/main` matched the final commit at verification time.
+- Python tests: `85 passed`.
+- Worker typecheck: `PASS`.
+- Worker tests: `145 passed / 1 cutoff-dependent failure`.
+- The single Worker test failure is the existing Acceptance condition whose fixed campaign cutoff had elapsed; it is not a regression from the campaign-close documentation change.
+- `git diff --check`: `PASS`.
+- The working tree was not literally clean: eight pre-existing untracked files were intentionally retained and were not staged, modified, or deleted.
+
+## GitHub Actions fallback schedule boundary
+
+- The GitHub Actions `schedule` trigger remains configured and was not changed by hibernation.
+- This is a separate residual execution path from the stopped Cloudflare Cron trigger.
+- Under the existing design, after the campaign cutoff (`2026-08-23 16:30 JST`), scheduled workflow invocations may still be created, but the cutoff gate prevents effective campaign monitoring/notification; they should exit without campaign state advancement or notifications.
+- Therefore Cloudflare Cron is `STOPPED`, while GitHub Actions schedule configuration is `RETAINED`; effective post-cutoff monitoring is inactive by design unless a future campaign explicitly reopens and reconfigures it.
