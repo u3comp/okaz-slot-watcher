@@ -260,7 +260,16 @@ Human Review前に禁止される行為:
 - 複数AI / 複数PCで継続する。
 - Production障害または状態不整合が発生する。
 
-## 16. Outcome-First Opportunity Surface Detection (2026-08-08)
+## 16. Campaign Closure (2026-08-25)
+
+- Campaign status: `CLOSED / HIBERNATED / REUSABLE`
+- Campaign outcome: `SUCCESS`.
+- User-provided evidence records a real LINE `5/5` availability notification for `8/22（土）14:00-16:00` and a source-page screenshot showing that same option available with quantity 1. Reservation acquisition and event participation remain explicitly user-reported outcomes.
+- Final pre-hibernation Worker: `ba610338-4fdf-4a9a-9d2a-6001948c533a`, deployment `2a2eb253-8249-4218-b74c-954f366c03a7`, 100% traffic. D1 remained `okaz-slot-watcher` with five canonical slots, pending empty, failures zero, outage false, and no active lease.
+- Hibernation is performed by applying the retained `wrangler.diagnostic-paused.toml` trigger configuration (`crons = []`). The Worker, D1, notification bindings, tests, and reusable monitoring code are retained.
+- Exact historical D1-to-screenshot correlation for `2026-08-18T09:55:20` is `UNKNOWN` because the current state is not a complete notification history ledger; this does not invalidate the supplied source-page and delivery evidence.
+
+## 17. Outcome-First Opportunity Surface Detection (2026-08-08)
 
 - Incident: `MISSED_OPPORTUNITY_SURFACE_CHANGE`。従来の固定4枠監視では、実ページに追加された申込枠を監視対象へ取り込めず、ユーザーが行動できる機会の変化を見逃し得た。
 - Preflight facts: D1の正本状態は4枠。2026-08-08のEcwid `catalog/product` API再取得はHTTP 200で5枠を返し、`8/22（土）17:00-19:00` が現在の追加枠として確認された。5枠目をD1へ事前seedせず、旧4枠との差分をProduction Observationで検出する。
