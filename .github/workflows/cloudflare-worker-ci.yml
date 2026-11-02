@@ -1,11 +1,6 @@
 name: Cloudflare Worker CI
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "cloudflare-worker/**"
-      - ".github/workflows/cloudflare-worker-ci.yml"
   workflow_dispatch:
 
 permissions:
